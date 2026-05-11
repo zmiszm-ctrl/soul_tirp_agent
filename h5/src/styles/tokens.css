@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #F4F1EC;
+  --color-bg-secondary: #E9E5DF;
+  --color-text-primary: #2F2F2F;
+  --color-text-secondary: #6B6B6B;
+  --color-accent-blue: #7FA7B5;
+  --color-accent-green: #6B7D6D;
+  --color-accent-orange: #D9A066;
+  --color-line-soft: rgba(0,0,0,0.08);
+
+  --font-serif-zh: 'Noto Serif SC', 'Source Han Serif SC', serif;
+  --font-sans-zh: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', sans-serif;
+
+  --radius-card: 16px;
+  --radius-pill: 999px;
+
+  --shadow-soft: 0 10px 30px rgba(0,0,0,0.08);
+  --shadow-card: 0 4px 20px rgba(0,0,0,0.06);
+}
+
+@layer base {
+  :root {
+    /* Color Tokens */
+    --color-bg-primary: #F4F1EC;
+    --color-bg-secondary: #E9E5DF;
+    --color-text-primary: #2F2F2F;
+    --color-text-secondary: #6B6B6B;
+    --color-accent-blue: #7FA7B5;
+    --color-accent-green: #6B7D6D;
+    --color-accent-orange: #D9A066;
+    --color-line-soft: rgba(0,0,0,0.08);
+
+    /* Gradient */
+    --gradient-hero: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%);
+
+    /* Typography Tokens */
+    --font-size-hero: 32px;
+    --font-size-title: 24px;
+    --font-size-body: 16px;
+    --font-size-caption: 13px;
+
+    --line-height-loose: 1.8;
+    --line-height-normal: 1.5;
+
+    --font-serif: 'Noto Serif SC', 'Source Han Serif SC', serif;
+    --font-sans: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', sans-serif;
+
+    /* Spacing Tokens */
+    --space-xs: 4px;
+    --space-sm: 8px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 40px;
+    --space-xxl: 64px;
+
+    /* Radius & Shadow */
+    --radius-card: 16px;
+    --radius-button: 999px;
+    --shadow-soft: 0 10px 30px rgba(0,0,0,0.08);
+    --shadow-card: 0 4px 20px rgba(0,0,0,0.06);
+
+    /* Motion Tokens */
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+    --duration-fast: 300ms;
+    --duration-normal: 600ms;
+    --duration-slow: 800ms;
+  }
+
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    font-size: var(--font-size-body);
+    line-height: var(--line-height-loose);
+    color: var(--color-text-primary);
+    background: var(--color-bg-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: none;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    min-height: 100svh;
+    background: var(--color-bg-primary);
+  }
+
+  #root {
+    width: 100%;
+    min-height: 100svh;
+    max-width: 480px;
+    margin: 0 auto;
+    position: relative;
+    overflow-x: hidden;
+  }
+}
