@@ -96,3 +96,24 @@ export interface LLMConfig {
   temperature?: number;
   stream?: boolean;
 }
+
+// ==================== 用户相关类型 ====================
+
+export interface User {
+  id: number;
+  username: string;
+}
+
+export interface UserPreferences {
+  default_direction: TravelDirection | null;
+  default_style: TravelStyle | null;
+  default_departure_time: DepartureTime | null;
+  city: string | null;
+  travel_budget: string | null;
+  companion_pref: string | null;
+  scenery_types: string[];
+  activity_types: string[];
+  music_pref: string | null;
+  dietary_note: string | null;
+  notes: string | null;
+}

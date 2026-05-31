@@ -5,6 +5,8 @@ import SelectPage from '@/pages/SelectPage';
 import LoadingPage from '@/pages/LoadingPage';
 import InvitationPage from '@/pages/InvitationPage';
 import DetailPage from '@/pages/DetailPage';
+import LoginPage from '@/pages/LoginPage';
+import ProfilePage from '@/pages/ProfilePage';
 
 function PageTransition({ children }: { children: React.ReactNode }) {
   return (
@@ -62,6 +64,22 @@ function AnimatedRoutes() {
           element={
             <PageTransition>
               <DetailPage />
+            </PageTransition>
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            <PageTransition>
+              <LoginPage />
+            </PageTransition>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <PageTransition>
+              <ProfilePage />
             </PageTransition>
           }
         />

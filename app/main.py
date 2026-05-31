@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .routes import router
+from .user_routes import router as user_router
 
 
 # 创建FastAPI应用
@@ -31,6 +32,7 @@ app.add_middleware(
 
 # 注册路由
 app.include_router(router)
+app.include_router(user_router)
 
 
 # 首页

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Navigation, Sun, Moon, Sunrise, Cloud, TreePine, Coffee, Mountain, Waves } from 'lucide-react';
 import { useTravelStore } from '@/stores/travelStore';
+import { useUserStore } from '@/stores/userStore';
 import BaguaDivination from '@/components/BaguaDivination';
 import type { TravelDirection, TravelStyle, DepartureTime } from '@/types';
 
@@ -30,10 +31,25 @@ const times: { value: DepartureTime; label: string; sublabel: string }[] = [
 export default function SelectPage() {
   const navigate = useNavigate();
   const { setPreferences } = useTravelStore();
+  const { user, preferences } = useUserStore();
 
-  const [selectedDirection, setSelectedDirection] = useState<TravelDirection>('any');
-  const [selectedStyle, setSelectedStyle] = useState<TravelStyle>('relax');
-  const [selectedTime, setSelectedTime] = useState<DepartureTime>('now');
+  const [selectedDirection, setSelectedDirection] = useState<TravelDirection>(
+    preferences?.default_direction || 'any'
+  );
+  const [selectedStyle, setSelectedStyle] = useState<TravelStyle>(
+    preferences?.default_style || 'relax'
+  );
+  const [selectedTime, setSelectedTime] = useState<DepartureTime>(
+    preferences?.default_departure_time || 'now'
+  );
+
+  useEffect(() => {
+    if (preferences) {
+      if (preferences.default_direction) setSelectedDirection(preferences.default_direction);
+      if (preferences.default_style) setSelectedStyle(preferences.default_style);
+      if (preferences.default_departure_time) setSelectedTime(preferences.default_departure_time);
+    }
+  }, [preferences]);
 
   const handleConfirm = async () => {
     const prefs = {
@@ -63,6 +79,18 @@ export default function SelectPage() {
         </button>
         <h1 className="text-title font-serif-zh text-text-primary">选择你的今天</h1>
       </motion.div>
+
+      {/* 用户偏好提示 */}
+      {user && preferences && (preferences.default_direction || preferences.default_style || preferences.default_departure_time) && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="mb-4 px-4 py-3 bg-accent-green/10 rounded-card border border-accent-green/20"
+        >
+          <p className="text-caption text-accent-green">已自动填充你的偏好设置，可手动修改</p>
+        </motion.div>
+      )}
 
       {/* Direction Selection */}
       <motion.section

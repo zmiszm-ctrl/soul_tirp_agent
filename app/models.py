@@ -214,3 +214,46 @@ class DistanceResponse(BaseModel):
     route: dict = Field(default={}, description="路线信息")
     taxi_cost: Optional[float] = Field(default=None, description="打车费用估算(元)")
     message: Optional[str] = None
+
+
+# ==================== 用户相关模型 ====================
+
+class UserRegisterRequest(BaseModel):
+    """用户注册请求"""
+    username: str = Field(min_length=2, max_length=20, description="用户名")
+    password: str = Field(min_length=6, description="密码")
+
+
+class UserLoginRequest(BaseModel):
+    """用户登录请求"""
+    username: str = Field(description="用户名")
+    password: str = Field(description="密码")
+
+
+class UserResponse(BaseModel):
+    """用户信息响应"""
+    success: bool = Field(default=True)
+    user: Optional[dict] = Field(default=None, description="用户信息")
+    message: Optional[str] = None
+
+
+class UserPreferences(BaseModel):
+    """用户偏好设置"""
+    default_direction: Optional[str] = Field(default=None, description="默认方向偏好")
+    default_style: Optional[str] = Field(default=None, description="默认旅行风格")
+    default_departure_time: Optional[str] = Field(default=None, description="默认出发时间")
+    city: Optional[str] = Field(default=None, description="常驻城市")
+    travel_budget: Optional[str] = Field(default=None, description="旅行预算")
+    companion_pref: Optional[str] = Field(default=None, description="同行偏好")
+    scenery_types: Optional[List[str]] = Field(default=[], description="喜欢的风景类型")
+    activity_types: Optional[List[str]] = Field(default=[], description="喜欢的活动类型")
+    music_pref: Optional[str] = Field(default=None, description="音乐偏好")
+    dietary_note: Optional[str] = Field(default=None, description="饮食备注")
+    notes: Optional[str] = Field(default=None, description="个人备注")
+
+
+class UserPreferencesResponse(BaseModel):
+    """用户偏好响应"""
+    success: bool = Field(default=True)
+    preferences: Optional[UserPreferences] = Field(default=None, description="用户偏好")
+    message: Optional[str] = None

@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from typing import Optional
 import json
+from pydantic import BaseModel, Field
 
 from .models import (
     TravelPlanRequest,
@@ -33,6 +34,13 @@ from .config import settings
 
 
 router = APIRouter()
+
+
+class LLMChatRequest(BaseModel):
+    """LLM对话请求"""
+    message: str = Field(description="对话内容")
+    provider: Optional[str] = Field(default=None, description="提供商")
+    model: Optional[str] = Field(default=None, description="模型名称")
 
 
 # ==================== 健康检查 ====================
@@ -499,23 +507,19 @@ async def get_available_models():
 
 
 @router.post("/api/v1/llm/chat")
-async def llm_chat(
-    message: str,
-    provider: Optional[str] = None,
-    model: Optional[str] = None
-):
+async def llm_chat(request: LLMChatRequest):
     """
     LLM对话测试接口
     
     用于测试各模型的可访问性
     """
     try:
-        llm = get_llm_manager(provider)
+        llm = get_llm_manager(request.provider)
         messages = [
             {"role": "system", "content": "你是一个友好的旅行助手"},
-            {"role": "user", "content": message}
+            {"role": "user", "content": request.message}
         ]
-        response = llm.chat(messages, model=model)
+        response = llm.chat(messages, model=request.model)
         return {"success": True, "response": response}
     except Exception as e:
         return {"success": False, "error": str(e)}

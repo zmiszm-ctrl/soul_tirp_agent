@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Compass, Leaf, Wind, Sparkles, MapPin, Loader2 } from 'lucide-react';
+import { Compass, Leaf, Wind, Sparkles, MapPin, Loader2, User } from 'lucide-react';
 import FateButton from '@/components/FateButton';
 import Modal from '@/components/Modal';
 import { useTravelStore } from '@/stores/travelStore';
+import { useUserStore } from '@/stores/userStore';
 import { getBrowserLocation, reverseGeocode, getLocalCity } from '@/services/amap';
 
 const FALLBACK_LOCATION = {
@@ -15,13 +16,24 @@ const FALLBACK_LOCATION = {
   district: '西湖区',
 };
 
+const VIDEO_COUNT = 6;
+
 export default function HomePage() {
   const navigate = useNavigate();
   const { userLocation, locationStatus, setUserLocation, setLocationStatus } = useTravelStore();
+  const { user } = useUserStore();
   const mountedRef = useRef(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [showAbout, setShowAbout] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [showDesignSystem, setShowDesignSystem] = useState(false);
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [videoSrc, setVideoSrc] = useState('');
+
+  useEffect(() => {
+    const randomIndex = Math.floor(Math.random() * VIDEO_COUNT) + 1;
+    setVideoSrc(`/videos/video${randomIndex}.mp4`);
+  }, []);
 
   // 组件卸载时标记
   useEffect(() => {
@@ -108,16 +120,24 @@ export default function HomePage() {
 
   return (
     <div className="relative w-full min-h-[100svh] overflow-hidden">
-      {/* Background Image */}
+      {/* Background Video */}
       <div className="absolute inset-0">
-        <motion.img
-          src="https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=800&q=80"
-          alt="Road journey"
-          className="w-full h-full object-cover"
-          initial={{ scale: 1.1 }}
-          animate={{ scale: 1 }}
-          transition={{ duration: 8, ease: 'easeOut' }}
-        />
+        {videoSrc && (
+          <video
+            ref={videoRef}
+            className={`w-full h-full object-cover transition-opacity duration-1000 ${videoLoaded ? 'opacity-100' : 'opacity-0'}`}
+            autoPlay
+            muted
+            loop
+            playsInline
+            onLoadedData={() => {
+              setVideoLoaded(true);
+              videoRef.current?.play().catch(() => {});
+            }}
+          >
+            <source src={videoSrc} type="video/mp4" />
+          </video>
+        )}
         <div className="absolute inset-0 hero-overlay" />
       </div>
 
@@ -140,8 +160,16 @@ export default function HomePage() {
             <span onClick={() => setShowAbout(true)} className="text-caption text-white/60 hover:text-white/90 transition-colors cursor-pointer">关于我们</span>
             <span onClick={() => setShowGuide(true)} className="text-caption text-white/60 hover:text-white/90 transition-colors cursor-pointer">如何使用</span>
             <span onClick={() => setShowDesignSystem(true)} className="text-caption text-white/60 hover:text-white/90 transition-colors cursor-pointer">设计系统</span>
-            <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">
-              <Sparkles className="w-3.5 h-3.5 text-white/80" />
+            <div 
+              className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center cursor-pointer hover:bg-white/30 transition-colors"
+              onClick={() => navigate(user ? '/profile' : '/login')}
+              title={user ? user.username : '登录/注册'}
+            >
+              {user ? (
+                <span className="text-[10px] text-white font-medium">{user.username[0].toUpperCase()}</span>
+              ) : (
+                <User className="w-3.5 h-3.5 text-white/80" />
+              )}
             </div>
           </nav>
         </motion.header>

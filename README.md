@@ -170,7 +170,7 @@ cd h5 && npm install && npm run build && cd ..
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pip install gunicorn
+pip3 install gunicorn
 
 # 4. 启动后端 (Gunicorn + Uvicorn Workers)
 gunicorn app.main:app \
