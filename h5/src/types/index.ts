@@ -66,9 +66,15 @@ export interface TravelPlan {
   id: string;
   destination: Destination;
   moments: Moment[];
-  bgm: BgmRecommendation;
+  bgm: BgmRecommendation | null;
   atmosphere: string;
   createdAt: number;
+}
+
+export interface ImageInfo {
+  url: string;
+  source: string;
+  title: string;
 }
 
 export interface AppState {

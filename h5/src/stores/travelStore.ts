@@ -4,6 +4,8 @@ import { generateMockPlan } from '@/services/mock';
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
 
+let generationCounter = 0;
+
 interface TravelState {
   preferences: TripPreferences | null;
   currentPlan: TravelPlan | null;
@@ -19,11 +21,13 @@ interface TravelState {
   hasDivined: boolean;
   invitationHTML: string;
   destinationName: string;
+  previewDestination: { name: string; lngLat: [number, number] } | null;
 
   setPreferences: (prefs: TripPreferences) => void;
   setUserLocation: (location: UserLocation) => void;
   setLocationStatus: (status: LocationStatus) => void;
   setHexagramResult: (result: HexagramResult) => void;
+  setPreviewDestination: (dest: { name: string; lngLat: [number, number] } | null) => void;
   generatePlan: () => Promise<void>;
   generateRichPlan: (distanceInfo?: DistanceInfo) => Promise<void>;
   reroll: () => Promise<void>;
@@ -57,20 +61,31 @@ export const useTravelStore = create<TravelState>((set, get) => ({
   hasDivined: false,
   invitationHTML: '',
   destinationName: '',
+  previewDestination: null,
 
   setPreferences: (prefs) => set({ preferences: prefs }),
-  setUserLocation: (location) => set({ userLocation: location }),
-  setLocationStatus: (status) => set({ locationStatus: status }),
+  setPreviewDestination: (dest) => set({ previewDestination: dest }),
+  setUserLocation: (location) => {
+    set({ userLocation: location });
+    try { localStorage.setItem('zheilitrip-location', JSON.stringify({ userLocation: location, locationStatus: get().locationStatus })); } catch {}
+  },
+  setLocationStatus: (status) => {
+    set({ locationStatus: status });
+    try { localStorage.setItem('zheilitrip-location', JSON.stringify({ userLocation: get().userLocation, locationStatus: status })); } catch {}
+  },
   setHexagramResult: (result) => set({ hexagramResult: result, hasDivined: true }),
 
   generatePlan: async () => {
     const { preferences, planHistory } = get();
     if (!preferences) return;
 
+    const myGeneration = ++generationCounter;
+
     set({ isLoading: true, loadingIndex: 0, loadingText: RICH_LOADING_TEXTS[0] });
 
     // Progress loading texts
     const interval = setInterval(() => {
+      if (generationCounter !== myGeneration) { clearInterval(interval); return; }
       const { loadingIndex } = get();
       const nextIndex = loadingIndex + 1;
       if (nextIndex < RICH_LOADING_TEXTS.length) {
@@ -79,20 +94,19 @@ export const useTravelStore = create<TravelState>((set, get) => ({
     }, 900);
 
     try {
-      // Simulate API delay (2.5-4s)
-      await new Promise((resolve) => setTimeout(resolve, 3500));
+      if (generationCounter !== myGeneration) return;
 
       const plan = generateMockPlan(preferences, planHistory);
 
       set({
         currentPlan: plan,
-        planHistory: [...planHistory, plan],
+        planHistory: [...planHistory, plan].slice(-20),
         isLoading: false,
         hasRerolled: false,
       });
     } catch (error) {
       console.error('Generate plan failed:', error);
-      set({ isLoading: false });
+      if (generationCounter === myGeneration) set({ isLoading: false });
     } finally {
       clearInterval(interval);
     }
@@ -102,9 +116,12 @@ export const useTravelStore = create<TravelState>((set, get) => ({
     const { preferences, userLocation, hexagramResult, planHistory } = get();
     if (!preferences) return;
 
+    const myGeneration = ++generationCounter;
+
     set({ isLoading: true, loadingIndex: 0, loadingText: RICH_LOADING_TEXTS[0] });
 
     const interval = setInterval(() => {
+      if (generationCounter !== myGeneration) { clearInterval(interval); return; }
       const { loadingIndex } = get();
       const nextIndex = loadingIndex + 1;
       if (nextIndex < RICH_LOADING_TEXTS.length) {
@@ -137,11 +154,15 @@ export const useTravelStore = create<TravelState>((set, get) => ({
         }),
       });
 
+      if (generationCounter !== myGeneration) return;
+
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
 
       const data = await response.json();
+
+      if (generationCounter !== myGeneration) return;
 
       if (data.success && data.plan) {
         const plan: TravelPlan = {
@@ -155,7 +176,7 @@ export const useTravelStore = create<TravelState>((set, get) => ({
 
         set({
           currentPlan: plan,
-          planHistory: [...planHistory, plan],
+          planHistory: [...planHistory, plan].slice(-20),
           invitationHTML: data.invitation_html || '',
           isLoading: false,
           hasRerolled: false,
@@ -165,11 +186,12 @@ export const useTravelStore = create<TravelState>((set, get) => ({
       }
     } catch (error) {
       console.error('Rich plan generation failed:', error);
+      if (generationCounter !== myGeneration) return;
       // 降级到mock数据
       const plan = generateMockPlan(preferences, planHistory);
       set({
         currentPlan: plan,
-        planHistory: [...planHistory, plan],
+        planHistory: [...planHistory, plan].slice(-20),
         isLoading: false,
         hasRerolled: false,
       });
@@ -184,8 +206,8 @@ export const useTravelStore = create<TravelState>((set, get) => ({
       return;
     }
 
-    set({ hasRerolled: true });
-    await get().generatePlan();
+    set({ hasRerolled: true, invitationHTML: '' });
+    await get().generateRichPlan();
   },
 
   acceptPlan: () => {
@@ -193,18 +215,34 @@ export const useTravelStore = create<TravelState>((set, get) => ({
     console.log('Plan accepted');
   },
 
-  reset: () => set({
-    preferences: null,
-    currentPlan: null,
-    isLoading: false,
-    hasRerolled: false,
-    loadingText: '',
-    loadingIndex: 0,
-    userLocation: null,
-    locationStatus: 'pending',
-    hexagramResult: null,
-    hasDivined: false,
-    invitationHTML: '',
-    destinationName: '',
-  }),
+  reset: () => {
+    const { userLocation, locationStatus } = get();
+    set({
+      preferences: null,
+      currentPlan: null,
+      planHistory: [],
+      isLoading: false,
+      hasRerolled: false,
+      loadingText: '',
+      loadingIndex: 0,
+      userLocation,
+      locationStatus,
+      hexagramResult: null,
+      hasDivined: false,
+      invitationHTML: '',
+      destinationName: '',
+      previewDestination: null,
+    });
+  },
 }));
+
+// 从 localStorage 恢复定位状态
+const savedLocation = localStorage.getItem('zheilitrip-location');
+if (savedLocation) {
+  try {
+    const { userLocation, locationStatus } = JSON.parse(savedLocation);
+    if (userLocation && locationStatus) {
+      useTravelStore.setState({ userLocation, locationStatus });
+    }
+  } catch {}
+}

@@ -10,14 +10,14 @@
 
 ## 核心功能
 
-- **盲盒旅行**: 根据三选偏好随机生成目的地
-- **邀请函体验**: LLM 生成风格化 HTML 邀请函，告别传统攻略
+- **Agent 流水线**: 搜索目的地信息 → 提取官方图片 → LLM 生成攻略 → 模板渲染邀请函
+- **邀请函体验**: 3 套风格模板（渐变之境/暗夜微光/山水画卷），告别传统攻略
 - **放空导向**: 强调慢节奏、不打卡、体验当地生活
 - **BGM推荐**: 每份攻略配有专属氛围音乐
 - **智能定位**: 自动获取用户位置，高德 API 计算驾车距离
 - **八卦占卜**: 撒叶起卦互动，64 卦影响旅行规划
-- **高德后端服务**: 地理编码 / 逆地理编码 / 驾车路线规划 / 距离查询
-- **设计系统**: 首页可查看完整 UI 设计规范
+- **图片缓存**: 搜索到的官方图片全局缓存复用，降低 API 消耗
+- **用户系统**: 登录注册 + 旅行偏好设置
 
 ## 快速开始
 
@@ -45,14 +45,14 @@ cp .env.example .env
 
 # 或分别启动
 ./start_backend.sh  # 后端: http://localhost:8000
-./start_frontend.sh # 前端: http://localhost:2000
+./start_frontend.sh # 前端: http://localhost:5173
 ```
 
 ### 启动后访问地址
 
 | 服务 | 地址 |
 |------|------|
-| 前端页面 | `http://localhost:2000/` |
+| 前端页面 | `http://localhost:5173/` |
 | 后端健康检查 | `http://localhost:8000/health` |
 | 后端接口文档 | `http://localhost:8000/docs` |
 
@@ -60,10 +60,12 @@ cp .env.example .env
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | React 19 + TypeScript + Vite + Tailwind CSS 4 + Framer Motion |
+| 前端 | React 19 + TypeScript + Vite 8 + Tailwind CSS 4 + Framer Motion |
 | 后端 | Python 3.10+ + FastAPI + Pydantic |
-| LLM | 智谱 glm-4.5-air (主) / DeepSeek v4-flash (备) |
+| LLM | 智谱 glm-4.7 (主) → glm-4.6v (备) → glm-4.5-air (兜底) |
+| 搜索 | 智谱 Web Search API (景点/人文搜索) + Reader API (图片提取) |
 | 地图 | 高德地图 Web Service REST API |
+| 图片 | 全局缓存 `data/images/` 按目的地组织 |
 
 ## 目录结构
 
@@ -73,28 +75,38 @@ soul_tirp_agent/
 │   ├── main.py                 # 应用入口
 │   ├── config.py               # 配置管理
 │   ├── models.py               # 数据模型
-│   ├── routes.py               # API 路由
-│   ├── llm_service.py          # LLM 服务层
+│   ├── routes.py               # API 路由（含图片服务）
+│   ├── user_routes.py          # 用户认证 + 偏好 API
+│   ├── llm_service.py          # LLM 服务层（Agent 流水线）
 │   ├── amap_service.py         # 高德地图服务
+│   ├── image_cache.py          # 图片缓存管理器
+│   ├── template_renderer.py    # 邀请函模板渲染引擎
+│   ├── templates/              # HTML 邀请函模板
+│   │   ├── gradient.html       # Stripe 渐变 mesh 风格
+│   │   ├── glow.html           # Spotify 暗色沉浸风格
+│   │   └── ink.html            # 山水画卷水墨风格
+│   ├── database.py             # SQLite 数据库
 │   └── utils/
 │       └── hexagram.py         # 卦象工具
 ├── h5/                         # React H5 前端
 │   ├── public/
-│   │   └── UI_format.png       # 设计系统截图
+│   │   ├── logo.png            # 网站 logo（透明背景）
+│   │   ├── favicon.ico         # 浏览器标签图标
+│   │   └── videos/             # 首页视频背景
 │   └── src/
 │       ├── pages/              # 页面组件
 │       ├── components/         # 可复用组件
-│       │   ├── Modal/          # 通用弹窗
-│       │   ├── FateButton/     # 命运按钮
-│       │   ├── BaguaDivination/# 八卦占卜
-│       │   ├── InvitationCard/ # 邀请函卡片
+│       │   ├── ErrorBoundary.tsx # 错误边界
+│       │   ├── BaguaDivination/ # 八卦占卜
 │       │   └── ...
 │       ├── services/           # 服务层
-│       └── stores/             # 状态管理
+│       ├── stores/             # 状态管理
+│       └── styles/             # Design Tokens
+├── data/
+│   └── images/                 # 图片缓存（按目的地组织）
 ├── .env.example                # 环境变量模板
 ├── requirements.txt            # Python 依赖
 ├── ARCHITECTURE.md             # 架构文档
-├── DEPLOYMENT.md               # 部署指南
 └── README.md                   # 本文档
 ```
 
@@ -104,14 +116,18 @@ soul_tirp_agent/
 |------|------|------|
 | GET | `/` | API 首页 |
 | GET | `/health` | 健康检查 |
-| POST | `/api/v1/travel/plan` | 生成旅行攻略 |
-| POST | `/api/v1/travel/rich-plan` | 生成丰富内容 + HTML 邀请函 |
-| POST | `/api/v1/travel/reroll` | 重新生成攻略 (限 1 次) |
+| POST | `/api/v1/travel/rich-plan` | Agent 流水线（搜索+图片+LLM+模板渲染） |
+| POST | `/api/v1/travel/plan` | 生成旅行攻略（旧版） |
 | GET | `/api/v1/travel/destinations` | 获取目的地列表 |
 | POST | `/api/v1/amap/geocode` | 地理编码 (地址→经纬度) |
 | POST | `/api/v1/amap/regeocode` | 逆地理编码 (经纬度→地址) |
 | POST | `/api/v1/amap/driving` | 驾车路线规划 |
 | POST | `/api/v1/amap/distance` | 一站式两地距离查询 |
+| POST | `/api/v1/user/register` | 用户注册 |
+| POST | `/api/v1/user/login` | 用户登录 |
+| GET | `/api/v1/user/preferences/{id}` | 获取用户偏好 |
+| PUT | `/api/v1/user/preferences/{id}` | 更新用户偏好 |
+| GET | `/api/v1/images/{dest}/{file}` | 缓存图片服务 |
 | GET | `/api/v1/llm/models` | 获取可用模型 |
 | POST | `/api/v1/llm/chat` | LLM 对话测试 |
 
@@ -123,12 +139,12 @@ APP_HOST=0.0.0.0
 APP_PORT=8000
 APP_ENV=dev              # dev | production
 
-# LLM 配置
+# LLM 配置（降级链: glm-4.7 → glm-4.6v → glm-4.5-air）
 LLM_PROVIDER=auto        # auto | deepseek | bigmodel
 DEEPSEEK_API_KEY=sk-xxx
 DEEPSEEK_MODEL=deepseek-v4-flash
 BIGMODEL_API_KEY=xxx
-BIGMODEL_MODEL=glm-4.5-air
+BIGMODEL_MODEL=glm-4.7
 
 # 高德地图配置
 AMAP_API_KEY=你的高德Web服务Key  # 后端 API 调用
@@ -138,9 +154,13 @@ AMAP_API_KEY=你的高德Web服务Key  # 后端 API 调用
 ## 用户流程
 
 ```
-首页(自动定位) → 三选(方向/风格/时间) → 八卦占卜(撒叶起卦)
-  → Loading(随机目的地 + 高德距离计算 + LLM 生成内容)
-  → 邀请函(LLM 生成 HTML) → 详情页 → 出发
+首页(自动定位 + 视频背景) → 三选(方向/风格/时间) → 八卦占卜(撒叶起卦)
+  → Loading:
+    1. 搜索目的地景点/人文信息
+    2. 提取官方图片（优先缓存）
+    3. LLM 生成攻略（三级降级: glm-4.7 → glm-4.6v → glm-4.5-air）
+    4. 模板渲染邀请函（3 套风格自动匹配）
+  → 邀请函 → 详情页 → 出发
 ```
 
 ## 开发指南
@@ -184,13 +204,11 @@ gunicorn app.main:app \
 
 # 5. Nginx 托管前端 + 反代后端
 # 将 h5/dist/ 指向 Nginx root，/api/ 代理到 127.0.0.1:8000
-# 详见 DEPLOYMENT.md
 ```
 
 ## 相关文档
 
 - [架构设计文档](./ARCHITECTURE.md)
-- [部署指南](./DEPLOYMENT.md)
 - [产品需求文档](./doc.md)
 
 ## License

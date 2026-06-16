@@ -156,9 +156,13 @@ export const ZHEJIANG_DESTINATIONS: Record<string, Array<{ name: string; lngLat:
  * 根据方向偏好随机选择目的地
  */
 export function selectDestination(direction: string): { name: string; lngLat: [number, number] } {
-  const allDests = [
-    ...(ZHEJIANG_DESTINATIONS[direction] || []),
-    ...ZHEJIANG_DESTINATIONS.any,
-  ];
+  const directionDests = ZHEJIANG_DESTINATIONS[direction] || [];
+  const allDests = direction === 'any'
+    ? [...directionDests]
+    : [...directionDests, ...ZHEJIANG_DESTINATIONS.any];
+  
+  if (allDests.length === 0) {
+    return ZHEJIANG_DESTINATIONS.any[0];
+  }
   return allDests[Math.floor(Math.random() * allDests.length)];
 }

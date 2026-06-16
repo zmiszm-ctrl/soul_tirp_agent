@@ -1,0 +1,82 @@
+<!-- 暗夜微光 — Spotify 风格暗色沉浸 -->
+<div style="max-width:375px;margin:0 auto;background:#121212;border-radius:16px;overflow:hidden;font-family:'Noto Serif SC','Georgia',serif;">
+
+  <!-- 主图 hero -->
+  <div style="position:relative;height:280px;overflow:hidden;">
+    <img src="{hero_image}" alt="{destination_name}" style="width:100%;height:100%;object-fit:cover;" />
+    <div style="position:absolute;inset-0;background:linear-gradient(to top,#121212 0%,transparent 50%,rgba(0,0,0,0.3) 100%);"></div>
+    <div style="position:absolute;bottom:0;left:0;right:0;padding:24px;">
+      <p style="margin:0 0 4px;font-size:11px;letter-spacing:2px;color:rgba(255,255,255,0.5);">{direction_label}</p>
+      <h1 style="margin:0;font-size:36px;font-weight:700;color:#fff;line-height:1.15;text-shadow:0 2px 12px rgba(0,0,0,0.5);">{destination_name}</h1>
+    </div>
+  </div>
+
+  <!-- 内容区 -->
+  <div style="padding:24px;">
+
+    <!-- 基本信息 -->
+    <div style="display:flex;gap:16px;margin:0 0 20px;">
+      <div style="flex:1;padding:12px;background:rgba(255,255,255,0.06);border-radius:8px;text-align:center;">
+        <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.4);">距离</p>
+        <p style="margin:4px 0 0;font-size:16px;color:#fff;font-family:'Noto Sans SC',sans-serif;">{distance}</p>
+      </div>
+      <div style="flex:1;padding:12px;background:rgba(255,255,255,0.06);border-radius:8px;text-align:center;">
+        <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.4);">车程</p>
+        <p style="margin:4px 0 0;font-size:16px;color:#fff;font-family:'Noto Sans SC',sans-serif;">{duration}</p>
+      </div>
+      <div style="flex:1;padding:12px;background:rgba(255,255,255,0.06);border-radius:8px;text-align:center;">
+        <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.4);">出发</p>
+        <p style="margin:4px 0 0;font-size:16px;color:#fff;font-family:'Noto Sans SC',sans-serif;">{suggested_time}</p>
+      </div>
+    </div>
+
+    <!-- 邀请函正文 -->
+    <p style="margin:0 0 24px;font-size:15px;line-height:1.8;color:rgba(255,255,255,0.8);font-family:'Noto Sans SC',sans-serif;">{description}</p>
+
+    <!-- 图片画廊 -->
+    <div style="margin:0 0 24px;display:flex;gap:8px;overflow-x:auto;">
+      {images_html}
+    </div>
+
+    <!-- 体验时刻 -->
+    <div style="margin:0 0 24px;">
+      <p style="margin:0 0 12px;font-size:11px;letter-spacing:2px;color:rgba(255,255,255,0.4);text-transform:uppercase;">体验时刻</p>
+      {moments_html}
+    </div>
+
+    <!-- 文化核心 -->
+    <div style="margin:0 0 24px;padding:20px;background:rgba(255,255,255,0.04);border-radius:12px;">
+      <p style="margin:0 0 8px;font-size:11px;letter-spacing:2px;color:rgba(255,255,255,0.35);">在地文化</p>
+      <p style="margin:0;font-size:14px;line-height:1.7;color:rgba(255,255,255,0.75);font-family:'Noto Sans SC',sans-serif;">{culture_core}</p>
+    </div>
+
+    <!-- 卦象 -->
+    {hexagram_html}
+
+    <!-- BGM -->
+    <div style="margin:0 0 24px;display:flex;align-items:center;gap:12px;padding:16px;background:rgba(255,255,255,0.04);border-radius:12px;">
+      <div style="width:40px;height:40px;border-radius:8px;background:{color_primary}33;display:flex;align-items:center;justify-content:center;">
+        <span style="font-size:18px;">♫</span>
+      </div>
+      <div>
+        <p style="margin:0;font-size:14px;color:rgba(255,255,255,0.85);font-family:'Noto Sans SC',sans-serif;">{bgm_title}</p>
+        <p style="margin:2px 0 0;font-size:12px;color:rgba(255,255,255,0.5);font-family:'Noto Sans SC',sans-serif;">{bgm_artist} · {bgm_description}</p>
+      </div>
+    </div>
+
+    <!-- 来源标注 -->
+    <div style="margin:0 0 16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.06);">
+      <p style="margin:0;font-size:10px;color:rgba(255,255,255,0.25);font-family:'Noto Sans SC',sans-serif;">图片来源：{image_sources}</p>
+    </div>
+
+    <!-- CTA -->
+    <div style="text-align:center;">
+      <a href="#" style="display:inline-block;padding:14px 36px;background:{color_primary};color:#fff;border-radius:999px;font-size:14px;font-family:'Noto Sans SC',sans-serif;text-decoration:none;box-shadow:0 4px 16px {color_primary}66;">出发去{destination_name}</a>
+    </div>
+  </div>
+
+  <!-- 底部 -->
+  <div style="padding:16px 24px;text-align:center;">
+    <p style="margin:0;font-size:10px;color:rgba(255,255,255,0.2);">浙里Trip · {destination_subtitle}</p>
+  </div>
+</div>

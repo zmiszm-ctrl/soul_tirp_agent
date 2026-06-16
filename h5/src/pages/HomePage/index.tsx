@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Compass, Leaf, Wind, Sparkles, MapPin, Loader2, User } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import FateButton from '@/components/FateButton';
 import Modal from '@/components/Modal';
 import { useTravelStore } from '@/stores/travelStore';
 import { useUserStore } from '@/stores/userStore';
 import { getBrowserLocation, reverseGeocode, getLocalCity } from '@/services/amap';
+import { generateMockPlan } from '@/services/mock';
+import { ZHEJIANG_DESTINATIONS } from '@/utils/hexagram';
+import type { TravelPlan } from '@/types';
 
 const FALLBACK_LOCATION = {
   lat: 30.27,
@@ -20,8 +24,17 @@ const VIDEO_COUNT = 6;
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const { userLocation, locationStatus, setUserLocation, setLocationStatus } = useTravelStore();
-  const { user } = useUserStore();
+  const { userLocation, locationStatus, setUserLocation, setLocationStatus, planHistory, setPreviewDestination } = useTravelStore(
+    useShallow((s) => ({
+      userLocation: s.userLocation,
+      locationStatus: s.locationStatus,
+      setUserLocation: s.setUserLocation,
+      setLocationStatus: s.setLocationStatus,
+      planHistory: s.planHistory,
+      setPreviewDestination: s.setPreviewDestination,
+    }))
+  );
+  const user = useUserStore((s) => s.user);
   const mountedRef = useRef(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [showAbout, setShowAbout] = useState(false);
@@ -29,6 +42,28 @@ export default function HomePage() {
   const [showDesignSystem, setShowDesignSystem] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [videoSrc, setVideoSrc] = useState('');
+  const [previewPlan, setPreviewPlan] = useState<TravelPlan | null>(null);
+
+  // 预览卡片固定显示桐庐
+  useEffect(() => {
+    setPreviewPlan(generateMockPlan(
+      { direction: 'west', style: 'slow', departureTime: 'now' },
+      []
+    ));
+  }, []);
+
+  // "换一个看看" 功能 — 随机展示不同目的地
+  const handlePreviewRefresh = useCallback(() => {
+    const directions: Array<'east' | 'south' | 'west' | 'north' | 'any'> = ['east', 'south', 'west', 'north', 'any'];
+    const styles: Array<'relax' | 'explore' | 'slow' | 'nature'> = ['relax', 'explore', 'slow', 'nature'];
+    const randomDir = directions[Math.floor(Math.random() * directions.length)];
+    const randomStyle = styles[Math.floor(Math.random() * styles.length)];
+    const newPlan = generateMockPlan(
+      { direction: randomDir, style: randomStyle, departureTime: 'now' },
+      previewPlan ? [previewPlan] : []
+    );
+    setPreviewPlan(newPlan);
+  }, [previewPlan]);
 
   useEffect(() => {
     const randomIndex = Math.floor(Math.random() * VIDEO_COUNT) + 1;
@@ -151,10 +186,8 @@ export default function HomePage() {
           className="flex items-center justify-between"
         >
           <div className="flex items-center gap-2">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-              <path d="M3 21l9-18 9 18H3z" />
-            </svg>
-            <span className="text-caption text-white/90 tracking-wider font-medium">KinzerAI</span>
+            <img src="/logo.png" alt="浙里Trip" className="h-5 w-auto" />
+            <span className="text-caption text-white/90 tracking-wider font-medium">浙里Trip</span>
           </div>
           <nav className="flex items-center gap-4">
             <span onClick={() => setShowAbout(true)} className="text-caption text-white/60 hover:text-white/90 transition-colors cursor-pointer">关于我们</span>
@@ -302,25 +335,54 @@ export default function HomePage() {
           <div className="bg-white/10 backdrop-blur-md rounded-card p-4 border border-white/10">
             <div className="flex items-center justify-between mb-3">
               <span className="text-caption text-white/60">看看你或许收到的邀请</span>
-              <span className="text-caption text-white/40 flex items-center gap-1">
+              <span
+                className="text-caption text-white/40 flex items-center gap-1 cursor-pointer hover:text-white/60 transition-colors"
+                onClick={handlePreviewRefresh}
+              >
                 换一个看看 <Sparkles className="w-3 h-3" />
               </span>
             </div>
-            <div className="flex gap-3">
-              <div className="flex-1 bg-white/90 rounded-lg p-3 flex items-center gap-3">
-                <img
-                  src="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=200&q=80"
-                  alt="Preview"
-                  className="w-16 h-16 rounded-lg object-cover"
-                />
-                <div>
-                  <p className="text-[11px] text-text-secondary">你被邀请前往</p>
-                  <p className="text-title font-serif-zh text-text-primary">安吉</p>
-                  <p className="text-caption text-text-secondary">一个适合慢下来的地方</p>
-                  <p className="text-[11px] text-text-secondary mt-1">287km · 3h12min</p>
+            {previewPlan && (
+              <div className="flex gap-3" onClick={() => {
+                if (previewPlan) {
+                  // 查找目的地的经纬度
+                  const allDests = [
+                    ...ZHEJIANG_DESTINATIONS.east,
+                    ...ZHEJIANG_DESTINATIONS.south,
+                    ...ZHEJIANG_DESTINATIONS.west,
+                    ...ZHEJIANG_DESTINATIONS.north,
+                    ...ZHEJIANG_DESTINATIONS.any,
+                  ];
+                  const found = allDests.find(d => d.name === previewPlan.destination.name);
+                  if (found) {
+                    setPreviewDestination({ name: found.name, lngLat: found.lngLat });
+                  }
+                }
+                navigate('/select');
+              }} style={{ cursor: 'pointer' }}>
+                <div className="flex-1 bg-white/90 rounded-lg p-3 flex items-center gap-3">
+                  {previewPlan.destination.image ? (
+                    <img
+                      src={previewPlan.destination.image}
+                      alt={previewPlan.destination.name}
+                      className="w-16 h-16 rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg bg-accent-green/20 flex items-center justify-center">
+                      <span className="text-2xl">🏔️</span>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-[11px] text-text-secondary">你被邀请前往</p>
+                    <p className="text-title font-serif-zh text-text-primary">{previewPlan.destination.name}</p>
+                    <p className="text-caption text-text-secondary">{previewPlan.destination.subtitle}</p>
+                    <p className="text-[11px] text-text-secondary mt-1">
+                      {previewPlan.destination.distance} · {previewPlan.destination.duration}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
         </motion.div>
 
@@ -332,7 +394,7 @@ export default function HomePage() {
           className="text-center pb-4"
         >
           <p className="text-[11px] text-white/30">
-            © 2026 KinzerAI. 为那些不想被安排的人。
+            © 2026 浙里Trip. 为那些不想被安排的人。
           </p>
         </motion.footer>
       </div>

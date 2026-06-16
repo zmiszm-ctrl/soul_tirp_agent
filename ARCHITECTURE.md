@@ -1,6 +1,6 @@
 # 浙里Trip 产品架构文档
 
-> 版本: 1.1.0 | 更新日期: 2026-05-10
+> 版本: 2.0.0 | 更新日期: 2026-06-16
 
 ## 一、项目概述
 
@@ -8,12 +8,14 @@
 
 ### 核心特性
 - 🎲 **盲盒旅行**: 根据用户三选偏好，随机生成目的地
-- 📜 **邀请函体验**: LLM生成风格化HTML邀请函，而非传统攻略
+- 🤖 **Agent 流水线**: 搜索信息 → 提取图片 → LLM 生成 → 模板渲染
+- 📜 **邀请函体验**: 3 套风格模板（渐变之境/暗夜微光/山水画卷）
 - 🧘 **放空导向**: 强调慢节奏、不打卡、体验当地生活
 - 🎵 **BGM推荐**: 每份攻略配有专属氛围音乐
 - 📍 **智能定位**: 自动获取用户位置，计算驾车距离
 - ☯ **八卦占卜**: 撒叶起卦互动，64卦影响旅行规划
-- 🍃 **撒叶动画**: CSS @keyframes 叶子从底部中央向四周撒出
+- 🖼️ **图片缓存**: 官方图片全局缓存复用，降低 API 消耗
+- 👤 **用户系统**: 登录注册 + 旅行偏好设置
 
 ---
 
@@ -24,7 +26,8 @@
 │                         用户端 (H5)                              │
 │  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐ │
 │  │ 出发页  │→│ 三选页  │→│ 生成页  │→│邀请函页 │→│ 详情页  │ │
-│  │ 自动定位 │  │八卦占卜 │  │随机目的地│  │LLM生成HTML│  │         │ │
+│  │ 视频背景│  │八卦占卜 │  │Agent流水线│ │模板渲染 │  │         │ │
+│  │ 动态预览│  │偏好缓存 │  │搜索+图片 │  │3套风格  │  │         │ │
 │  └─────────┘  └─────────┘  └─────────┘  └─────────┘  └─────────┘ │
 └─────────────────────────────────────────────────────────────────┘
                                     │
@@ -33,10 +36,16 @@
 │                       API网关 (FastAPI)                          │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │                    /api/v1/travel/*                       │   │
+│  │  - POST /rich-plan    Agent流水线（搜索+图片+LLM+渲染）   │   │
 │  │  - POST /plan         生成旅行攻略（旧版）                │   │
-│  │  - POST /rich-plan    生成丰富内容+HTML邀请函             │   │
 │  │  - GET  /destinations 获取目的地列表                      │   │
-│  │  - POST /reroll       重新生成(限1次)                     │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                    /api/v1/user/*                         │   │
+│  │  - POST /register     用户注册                            │   │
+│  │  - POST /login        用户登录                            │   │
+│  │  - GET  /preferences  获取用户偏好                        │   │
+│  │  - PUT  /preferences  更新用户偏好                        │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │                    /api/v1/amap/*                         │   │
@@ -46,18 +55,41 @@
 │  │  - POST /distance     一站式两地距离查询                  │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │                    /api/v1/llm/*                        │   │
-│  │  - GET  /models      获取可用模型                         │   │
-│  │  - POST /chat        LLM对话测试                         │   │
+│  │                    /api/v1/images/*                       │   │
+│  │  - GET  /{dest}/{file} 缓存图片静态服务                   │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    LLM服务层 (可切换)                            │
+│                    Agent 流水线 (llm_service.py)                 │
+│                                                                  │
+│  Step 1: 搜索目的地信息 (智谱 Web Search API)                   │
+│    └─ search_pro → 景点/人文/特色信息                           │
+│                                                                  │
+│  Step 2: 获取图片 (优先缓存 → 搜索补充)                         │
+│    ├─ image_cache.py → 检查 data/images/{dest}/                │
+│    └─ BigModel Reader API → 从官网页面提取图片                  │
+│                                                                  │
+│  Step 3: LLM 生成攻略 (三级降级链)                              │
+│    ├─ glm-4.7 (首选)                                           │
+│    ├─ glm-4.6v (备用)                                          │
+│    ├─ glm-4.5-air (兜底)                                       │
+│    └─ mock 数据 (最终降级)                                      │
+│                                                                  │
+│  Step 4: 模板渲染邀请函 (template_renderer.py)                  │
+│    ├─ gradient.html  — Stripe 渐变 mesh 风格                   │
+│    ├─ glow.html      — Spotify 暗色沉浸风格                    │
+│    └─ ink.html       — 山水画卷水墨风格                         │
+└─────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    智谱 BigModel API                             │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │  智谱 glm    │  │ DeepSeek   │  │   Auto (智能切换)        │ │
-│  │ 4.5-air ★   │  │  v4-flash  │  │   优先智谱 → 降级DeepSeek │ │
+│  │ Web Search  │  │ Reader API  │  │  LLM Chat               │ │
+│  │ 搜索目的地  │  │ 提取页面图片│  │  生成攻略 JSON           │ │
+│  │ 0.03元/次   │  │ 按页计费    │  │  三级降级               │ │
 │  └─────────────┘  └─────────────┘  └─────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
                                     │
@@ -66,13 +98,7 @@
 │                 高德地图服务 (Web Service REST API)              │
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │  amap_service.py - 后端直接调用REST API                    │   │
-│  │  - 地理编码 (地址→经纬度坐标)                              │   │
-│  │  - 逆地理编码 (经纬度→中文地址)                            │   │
-│  │  - 驾车路线规划 (距离+时间+过路费+步骤)                    │   │
-│  │  - 一站式距离查询 (地址→路线→结果)                        │   │
-│  │                                                          │   │
-│  │  API: https://restapi.amap.com/v3/*                      │   │
-│  │  认证: AMAP_API_KEY (环境变量)                             │   │
+│  │  - 地理编码 / 逆地理编码 / 驾车路线规划 / 距离查询       │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -84,15 +110,14 @@
 ### 前端 (H5)
 | 技术 | 版本 | 用途 |
 |------|------|------|
-| React | 19.x | UI框架 |
+| React | 19.x | UI框架（React.lazy 代码分割） |
 | TypeScript | 6.x | 类型安全 |
-| Vite | 8.x | 构建工具 |
+| Vite | 8.x | 构建工具（manualChunks 分包） |
 | Tailwind CSS | 4.x | 样式方案 |
 | Framer Motion | 12.x | 动效动画 |
 | React Router | 7.x | 路由管理 |
-| Zustand | 5.x | 状态管理 |
-| Axios | 1.x | HTTP客户端 |
-| html2canvas | 1.x | 截图分享 |
+| Zustand | 5.x | 状态管理（useShallow selector） |
+| DOMPurify | 3.x | LLM HTML 安全过滤 |
 
 ### 后端 (API)
 | 技术 | 版本 | 用途 |
@@ -101,15 +126,22 @@
 | FastAPI | 0.110+ | Web框架 |
 | Pydantic | 2.x | 数据校验 |
 | uvicorn | 0.27+ | ASGI服务器 |
-| requests | - | HTTP客户端 |
-| openai | 1.x | DeepSeek SDK |
+| requests | 2.x | HTTP客户端（高德/智谱API） |
+| Pillow | 12.x | 图片处理（logo去背景） |
 
-### LLM模型
-| 提供商 | 模型 | 用途 |
+### LLM 模型（三级降级链）
+| 优先级 | 模型 | 用途 |
 |--------|------|------|
-| 智谱 | glm-4.5-air ★ | 主要生成 |
-| 智谱 | glm-5.1 | 备用生成 |
-| DeepSeek | deepseek-v4-flash | 降级使用 |
+| ★★★ | glm-4.7 | 首选，旅行攻略生成 |
+| ★★ | glm-4.6v | 备用，多模态能力 |
+| ★ | glm-4.5-air | 兜底，最快最便宜 |
+| — | mock 数据 | 最终降级方案 |
+
+### 搜索服务
+| 服务 | API | 用途 |
+|------|-----|------|
+| 智谱 Web Search | `/web_search` | 搜索目的地景点/人文信息 |
+| 智谱 Reader | `/reader` | 从官网页面提取图片 URL |
 
 ---
 
@@ -122,54 +154,62 @@ soul_tirp_agent/
 │   ├── main.py                 # 应用入口
 │   ├── config.py               # 配置管理
 │   ├── models.py               # 数据模型
-│   ├── routes.py               # API路由
-│   ├── llm_service.py          # LLM服务层
-│   ├── amap_service.py         # 高德地图服务（地理编码/路线规划）
-│   └── utils/                  # 工具函数
+│   ├── routes.py               # API路由（旅行+高德+图片服务）
+│   ├── user_routes.py          # 用户认证+偏好 API
+│   ├── llm_service.py          # LLM服务层（Agent流水线+降级链）
+│   ├── amap_service.py         # 高德地图服务
+│   ├── image_cache.py          # 图片缓存管理器
+│   ├── template_renderer.py    # 邀请函模板渲染引擎
+│   ├── database.py             # SQLite 数据库
+│   ├── templates/              # HTML 邀请函模板
+│   │   ├── gradient.html       # Stripe 渐变 mesh 风格
+│   │   ├── glow.html           # Spotify 暗色沉浸风格
+│   │   └── ink.html            # 山水画卷水墨风格
+│   └── utils/
 │       └── hexagram.py         # 卦象工具
 │
 ├── h5/                         # React H5 前端
-│   ├── src/
-│   │   ├── App.tsx             # 根组件
-│   │   ├── main.tsx            # 入口文件
-│   │   ├── pages/              # 页面组件
-│   │   │   ├── HomePage/       # 出发页（含定位）
-│   │   │   ├── SelectPage/     # 三选页（含占卜）
-│   │   │   ├── LoadingPage/    # 生成中
-│   │   │   ├── InvitationPage/ # 邀请函
-│   │   │   └── DetailPage/     # 详情页
-│   │   ├── components/         # 可复用组件
-│   │   │   ├── FateButton/     # 命运按钮
-│   │   │   ├── BaguaDivination/# 八卦占卜（撒叶动画）
-│   │   │   ├── InvitationCard/ # 邀请函卡片
-│   │   │   ├── MomentsCard/    # 时刻卡片
-│   │   │   ├── RouteView/      # 路线视图
-│   │   │   ├── ShareCard/      # 分享卡片
-│   │   │   └── FateGenerator/  # 生成动效
-│   │   ├── services/           # 服务层
-│   │   │   ├── llm.ts          # LLM调用
-│   │   │   ├── amap.ts         # 高德地图服务
-│   │   │   └── mock.ts         # Mock数据
-│   │   ├── stores/             # 状态管理
-│   │   │   └── travelStore.ts  # 旅行状态
-│   │   ├── types/              # 类型定义
-│   │   │   └── index.ts
-│   │   ├── utils/              # 工具函数
-│   │   │   ├── helpers.ts
-│   │   │   └── hexagram.ts     # 64卦映射
-│   │   └── styles/             # 样式文件
-│   │       ├── tokens.css      # Design Tokens
-│   │       └── global.css      # 全局样式
-│   └── package.json
+│   ├── public/
+│   │   ├── logo.png            # 网站 logo（透明背景）
+│   │   ├── favicon.ico         # 浏览器标签图标
+│   │   └── videos/             # 首页视频背景（6个视频）
+│   └── src/
+│       ├── App.tsx             # 根组件（React.lazy + ErrorBoundary）
+│       ├── main.tsx            # 入口文件
+│       ├── pages/
+│       │   ├── HomePage/       # 出发页（视频背景+动态预览卡片）
+│       │   ├── SelectPage/     # 三选页（含占卜）
+│       │   ├── LoadingPage/    # Agent 流水线执行
+│       │   ├── InvitationPage/ # 邀请函（DOMPurify 安全过滤）
+│       │   ├── DetailPage/     # 详情页
+│       │   ├── LoginPage/      # 登录注册
+│       │   └── ProfilePage/    # 用户偏好设置
+│       ├── components/
+│       │   ├── ErrorBoundary.tsx # 错误边界
+│       │   ├── BaguaDivination/ # 八卦占卜（撒叶动画）
+│       │   └── ...
+│       ├── services/
+│       │   ├── amap.ts         # 高德地图服务
+│       │   ├── llm.ts          # LLM 调用
+│       │   └── mock.ts         # Mock 数据
+│       ├── stores/
+│       │   ├── travelStore.ts  # 旅行状态（含图片缓存）
+│       │   └── userStore.ts    # 用户状态
+│       └── styles/
+│           ├── tokens.css      # Design Tokens（含 prefers-reduced-motion）
+│           └── global.css      # 全局样式
 │
-├── .env                        # 环境变量配置
-├── requirements.txt            # Python依赖
-├── start_all.sh               # 一键启动脚本
-├── start_backend.sh           # 后端启动脚本
-├── start_frontend.sh          # 前端启动脚本
-├── ARCHITECTURE.md            # 本文档
-├── README.md                  # 项目说明
-└── doc.md                     # 产品需求文档
+├── data/
+│   ├── zheilitrip.db           # SQLite 数据库
+│   └── images/                 # 图片缓存（按目的地目录组织）
+│       ├── anji/               # 安吉图片
+│       ├── moganshan/          # 莫干山图片
+│       └── ...
+│
+├── .env.example                # 环境变量模板
+├── requirements.txt            # Python 依赖
+├── ARCHITECTURE.md             # 本文档
+└── README.md                   # 项目说明
 ```
 
 ---
@@ -179,505 +219,234 @@ soul_tirp_agent/
 ### 基础信息
 - 基础URL: `http://localhost:8000`
 - API文档: `http://localhost:8000/docs`
-- 认证方式: 暂无需认证 (MVP阶段)
+- 认证方式: 用户名+密码（无 JWT，MVP 阶段）
 
-### 接口列表
+### Agent 流水线
 
 | 方法 | 路径 | 描述 |
 |------|------|------|
-| GET | `/` | API首页 |
-| GET | `/health` | 健康检查 |
-| GET | `/api/v1/travel/destinations` | 获取目的地列表 |
-| POST | `/api/v1/travel/plan` | 生成旅行攻略（旧版） |
-| POST | `/api/v1/travel/rich-plan` | 生成丰富内容+HTML邀请函 |
-| POST | `/api/v1/travel/reroll` | 重新生成攻略 |
-| GET | `/api/v1/travel/plan/{id}` | 获取攻略详情 |
+| POST | `/api/v1/travel/rich-plan` | 完整 Agent 流水线 |
+
+请求体:
+```json
+{
+  "direction": "east",
+  "style": "relax",
+  "departure_time": "now",
+  "user_location": { "city": "杭州", "district": "西湖区", "lat": 30.25, "lng": 120.13 },
+  "destination_name": "安吉",
+  "distance_info": { "distance": "280km", "duration": "3小时" },
+  "hexagram": { "name": "乾", "meaning": "元亨利贞", "lines": [1,1,1,1,1,1] }
+}
+```
+
+响应体:
+```json
+{
+  "success": true,
+  "plan": { "destination": {...}, "moments": [...], "bgm": {...}, "atmosphere": "..." },
+  "invitation_html": "<div>...渲染后的HTML邀请函...</div>",
+  "images": [{ "url": "/api/v1/images/anji/scenic_竹海_01.jpg", "source": "anji.gov.cn", "title": "中国大竹海" }],
+  "template_used": "gradient",
+  "hexagram_name": "乾",
+  "hexagram_interpretation": "元亨利贞"
+}
+```
+
+### 用户系统
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| POST | `/api/v1/user/register` | 用户注册 |
+| POST | `/api/v1/user/login` | 用户登录 |
+| GET | `/api/v1/user/preferences/{user_id}` | 获取用户偏好 |
+| PUT | `/api/v1/user/preferences/{user_id}` | 更新用户偏好 |
+
+### 图片服务
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
+| GET | `/api/v1/images/{destination}/{filename}` | 缓存图片静态服务 |
+
+### 高德地图
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
 | POST | `/api/v1/amap/geocode` | 地理编码（地址→经纬度） |
 | POST | `/api/v1/amap/regeocode` | 逆地理编码（经纬度→地址） |
 | POST | `/api/v1/amap/driving` | 驾车路线规划 |
 | POST | `/api/v1/amap/distance` | 一站式两地距离查询 |
+
+### LLM 测试
+
+| 方法 | 路径 | 描述 |
+|------|------|------|
 | GET | `/api/v1/llm/models` | 获取可用模型 |
-| POST | `/api/v1/llm/chat` | LLM对话测试 |
+| POST | `/api/v1/llm/chat` | LLM 对话测试 |
 
-### 请求示例
+---
 
-**生成旅行攻略**
-```bash
-curl -X POST http://localhost:8000/api/v1/travel/plan \
-  -H "Content-Type: application/json" \
-  -d '{
-    "direction": "east",
-    "style": "relax",
-    "departure_time": "now"
-  }'
+## 六、核心模块
+
+### Agent 流水线 (`llm_service.py`)
+
+```
+agent_generate_plan()
+  ├─ Step 1: search(query="{目的地} 旅游景点 人文 特色")
+  │    └─ 返回搜索结果摘要作为 LLM 上下文
+  │
+  ├─ Step 2: 图片获取（优先缓存）
+  │    ├─ image_cache.get_cached_images() → 命中则直接返回
+  │    └─ image_cache.cache_images_batch() → 搜索+下载+缓存
+  │
+  ├─ Step 3: generate_travel_plan_for_agent()
+  │    ├─ 使用 chat_with_fallback() 三级降级
+  │    └─ 输出结构化 JSON（destination, moments, bgm, culture_core）
+  │
+  └─ Step 4: render_invitation()
+       ├─ 根据目的地选择模板（gradient/glow/ink）
+       ├─ 渲染体验时刻、图片画廊、卦象、BGM
+       └─ 输出完整 HTML 邀请函
 ```
 
-**响应示例**
+### 图片缓存 (`image_cache.py`)
+
+```
+存储路径: data/images/{目的地英文名}/{类型}_{景点名}_{序号}.jpg
+示例:     data/images/anji/official_中国大竹海_01.jpg
+
+类型标签:
+  official  — 来自 gov.cn 官方网站
+  scenic    — 景点风景照
+  culture   — 人文/文化相关
+  food      — 美食相关
+  general   — 其他
+
+服务端点: GET /api/v1/images/{destination}/{filename}
+安全措施: 路径穿越防护（realpath 校验）
+```
+
+### 模板系统 (`template_renderer.py`)
+
+```
+3 套模板按目的地自动匹配:
+  gradient (渐变) — 山林/自然: 安吉、桐庐、德清、莫干山...
+  glow (暗夜)     — 海岛/水边: 嵊泗、象山、舟山、千岛湖...
+  ink (水墨)      — 古村/文化: 永嘉、开化、缙云、南浔...
+
+渲染流程:
+  1. 根据目的地名查找 DESTINATION_STYLE 映射
+  2. 加载对应模板 HTML
+  3. 替换模板变量（目的地名、距离、文案、图片URL等）
+  4. 渲染子组件（体验时刻、卦象、图片画廊）
+  5. 返回完整 HTML 字符串
+```
+
+### LLM 降级链
+
+```
+chat_with_fallback(messages, models=[glm-4.7, glm-4.6v, glm-4.5-air])
+  ├─ 尝试 glm-4.7 → 成功则返回
+  ├─ 失败 → 尝试 glm-4.6v → 成功则返回
+  ├─ 失败 → 尝试 glm-4.5-air → 成功则返回
+  └─ 全部失败 → 抛出异常 → 降级到 mock 数据
+```
+
+### 图片缓存流程
+
+```
+用户请求生成"安吉"攻略
+  → 检查 data/images/anji/ 目录
+  ├─ 已有 ≥3 张 → 直接返回缓存图片（不消耗搜索次数）
+  └─ 不足 → 智谱 Web Search 搜索官方页面
+       → Reader API 提取图片 URL
+       → 下载保存到 data/images/anji/
+       → 返回图片列表
+```
+
+---
+
+## 七、数据模型
+
+### 用户偏好 (user_preferences)
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| user_id | int | 用户ID（外键） |
+| default_direction | str? | 默认方向偏好 |
+| default_style | str? | 默认旅行风格 |
+| default_departure_time | str? | 默认出发时间 |
+| city | str? | 常驻城市 |
+| travel_budget | str? | 旅行预算 |
+| companion_pref | str? | 同行偏好 |
+| scenery_types | json? | 喜欢的风景类型（数组） |
+| activity_types | json? | 喜欢的活动类型（数组） |
+| music_pref | str? | 音乐偏好 |
+| dietary_note | str? | 饮食备注 |
+| notes | str? | 个人备注 |
+
+### LLM 输出 JSON 结构
+
 ```json
 {
-  "success": true,
-  "plan": {
-    "id": "uuid-xxx",
-    "destination": {
-      "name": "安吉",
-      "subtitle": "一个适合慢下来的地方",
-      "distance": "287km",
-      "duration": "3小时12分钟"
-    },
-    "moments": [
-      {
-        "time": "清晨 6:40",
-        "title": "在空无一人的竹林里散步"
-      }
-    ],
-    "bgm": {
-      "title": "平凡之路",
-      "artist": "朴树"
-    },
-    "atmosphere": "★★★★☆"
-  }
-}
-```
-
-### 高德地图接口示例
-
-**地理编码（地址→经纬度）**
-```bash
-curl -X POST http://localhost:8000/api/v1/amap/geocode \
-  -H "Content-Type: application/json" \
-  -d '{
-    "address": "北京市朝阳区阜通东大街6号",
-    "city": "北京"
-  }'
-```
-
-**响应示例**
-```json
-{
-  "success": true,
-  "results": [
-    {
-      "formatted_address": "北京市朝阳区阜通东大街6号",
-      "province": "北京市",
-      "city": "北京市",
-      "district": "朝阳区",
-      "location": "116.481028,39.989643",
-      "level": "门牌号"
-    }
+  "template": "gradient",
+  "destination": {
+    "name": "安吉",
+    "subtitle": "竹海清风，慢下来的勇气",
+    "description": "你会在三小时后抵达...",
+    "distance": "280km",
+    "duration": "3小时",
+    "suggested_time": "周六 06:30",
+    "direction_label": "利在西行"
+  },
+  "moments": [
+    { "time": "清晨 6:40", "title": "在空无一人的竹林里散步", "description": "...", "image": "" }
   ],
-  "message": "地理编码成功"
-}
-```
-
-**驾车路线规划**
-```bash
-curl -X POST http://localhost:8000/api/v1/amap/driving \
-  -H "Content-Type: application/json" \
-  -d '{
-    "origin": "116.379028,39.865042",
-    "destination": "116.427281,39.903719",
-    "strategy": "fastest"
-  }'
-```
-
-**响应示例**
-```json
-{
-  "success": true,
-  "origin": "116.379028,39.865042",
-  "destination": "116.427281,39.903719",
-  "distance_km": 8.5,
-  "duration_text": "22分钟",
-  "duration_seconds": 1320,
-  "tolls_yuan": 0,
-  "taxi_cost": 25.0,
-  "steps": [
-    {
-      "instruction": "沿XX路行驶565米右转",
-      "road": "XX路",
-      "distance": 565,
-      "time": 120,
-      "action": "右转",
-      "orientation": "东"
-    }
-  ],
-  "message": "驾车路线规划成功"
-}
-```
-
-**一站式两地距离查询**
-```bash
-curl -X POST http://localhost:8000/api/v1/amap/distance \
-  -H "Content-Type: application/json" \
-  -d '{
-    "from_address": "杭州市西湖区",
-    "to_address": "安吉县",
-    "from_city": "杭州",
-    "to_city": "湖州"
-  }'
-```
-
-**响应示例**
-```json
-{
-  "success": true,
-  "from_info": {
-    "address": "浙江省杭州市西湖区",
-    "location": "120.129722,30.259167",
-    "province": "浙江省",
-    "city": "杭州市",
-    "district": "西湖区"
-  },
-  "to_info": {
-    "address": "浙江省湖州市安吉县",
-    "location": "119.681667,30.633056",
-    "province": "浙江省",
-    "city": "湖州市",
-    "district": "安吉县"
-  },
-  "route": {
-    "distance_km": 78.5,
-    "duration_text": "1小时15分钟",
-    "duration_seconds": 4500,
-    "tolls_yuan": 35,
-    "tolls_distance_km": 45.2,
-    "traffic_lights": 8,
-    "steps_count": 12
-  },
-  "taxi_cost": 235.0,
-  "message": "距离查询成功"
+  "bgm": { "title": "平凡之路", "artist": "朴树", "description": "..." },
+  "atmosphere": "竹林清风，慢下来的勇气",
+  "culture_core": "安吉是竹文化之乡，白茶之乡..."
 }
 ```
 
 ---
 
-## 六、数据模型
+## 八、环境变量
 
-### TripPreferences (用户偏好)
-```python
-{
-    direction: "east" | "south" | "west" | "north" | "any"
-    style: "relax" | "explore" | "slow" | "nature"
-    departure_time: "now" | "afternoon" | "tomorrow"
-}
-```
-
-### Destination (目的地)
-```python
-{
-    name: str           # 目的地名称
-    subtitle: str       # 氛围描述
-    description: str    # 邀请函正文
-    distance: str       # 距离
-    duration: str       # 车程
-    suggested_time: str # 建议出发时间
-    image: str          # 背景图
-    direction_label: str # 方向吉祥语
-}
-```
-
-### Moment (体验时刻)
-```python
-{
-    id: str        # 唯一ID
-    time: str      # 时间
-    title: str     # 标题
-    description: str # 描述
-    image: str     # 配图
-}
-```
-
----
-
-## 七、配置说明
-
-### 环境变量 (.env)
 ```bash
 # 应用配置
 APP_HOST=0.0.0.0
 APP_PORT=8000
-APP_ENV=dev
+APP_ENV=dev              # dev | production
 
-# LLM配置
-LLM_PROVIDER=auto        # auto | deepseek | bigmodel
+# LLM 配置（降级链: glm-4.7 → glm-4.6v → glm-4.5-air）
+LLM_PROVIDER=auto
 DEEPSEEK_API_KEY=sk-xxx
 DEEPSEEK_MODEL=deepseek-v4-flash
 BIGMODEL_API_KEY=xxx
-BIGMODEL_MODEL=glm-4.5-air
+BIGMODEL_MODEL=glm-4.7
 
-# 高德地图配置
-AMAP_API_KEY=你的高德Web服务Key  # 后端API调用（地理编码/路线规划）
+# 高德地图
+AMAP_API_KEY=你的高德Web服务Key
+# 前端 JS SDK Key 配置在 h5/index.html <script> 标签中
 ```
-
-### 模型切换逻辑
-1. `LLM_PROVIDER=auto`: 优先使用智谱glm-4.5-air，失败时降级到DeepSeek
-2. `LLM_PROVIDER=deepseek`: 固定使用DeepSeek
-3. `LLM_PROVIDER=bigmodel`: 固定使用智谱
 
 ---
 
-## 八、部署方案
+## 九、部署方案
 
 ### 开发环境
 ```bash
-# 一键启动
-./start_all.sh
-
-# 或分别启动
-./start_backend.sh  # 终端1
-./start_frontend.sh # 终端2
+./start_all.sh     # 启动前后端
+./start_all.sh stop # 停止
 ```
 
 ### 生产环境
-
-#### 1. 前端部署
-
 ```bash
-cd h5
+# 1. 构建前端
+cd h5 && npm install && npm run build
 
-# 1. 安装依赖
-npm install
+# 2. 启动后端 (Gunicorn)
+gunicorn app.main:app --workers 4 --bind 0.0.0.0:8000
 
-# 2. 构建生产版本
-npm run build
-# 输出到 h5/dist/ 目录
-
-# 3. 使用 Nginx 托管
-cp -r dist/* /var/www/zheilitrip/
+# 3. Nginx 托管前端 + 反代后端
 ```
-
-**Nginx 配置示例**:
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-    
-    root /var/www/zheilitrip;
-    index index.html;
-    
-    # SPA路由支持
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-    
-    # 静态资源缓存
-    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-}
-```
-
-#### 2. 后端部署
-
-```bash
-cd /path/to/soul_tirp_agent
-
-# 1. 创建虚拟环境
-python3 -m venv .venv
-source .venv/bin/activate
-
-# 2. 安装依赖
-pip install -r requirements.txt
-
-# 3. 使用 Gunicorn + Uvicorn Workers 启动
-pip install gunicorn
-gunicorn app.main:app \
-    --workers 4 \
-    --worker-class uvicorn.workers.UvicornWorker \
-    --bind 0.0.0.0:8000 \
-    --access-logfile /var/log/zheilitrip/access.log \
-    --error-logfile /var/log/zheilitrip/error.log \
-    --daemon
-```
-
-#### 3. 环境变量配置 (.env)
-
-**生产环境必须配置**:
-```bash
-# 应用配置
-APP_HOST=0.0.0.0
-APP_PORT=8000
-APP_ENV=production  # 改为 production
-
-# LLM配置 (使用生产环境的API Key)
-LLM_PROVIDER=auto
-DEEPSEEK_API_KEY=sk-xxx-production-key
-BIGMODEL_API_KEY=xxx-production-key
-BIGMODEL_MODEL=glm-4.5-air
-
-# 高德地图 Key (已在 index.html 中配置)
-# AMAP_KEY=5f4bdb7d72c8683bfc46430bd84db3df
-```
-
-**安全建议**:
-- 不要将 `.env` 文件提交到Git
-- 使用 `.env.example` 作为模板
-- 生产环境API Key需要定期轮换
-
-#### 4. Docker 部署
-
-**Dockerfile**:
-```dockerfile
-FROM python:3.10-slim
-
-WORKDIR /app
-
-# 安装依赖
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install --no-cache-dir gunicorn
-
-# 复制应用代码
-COPY app/ ./app/
-
-EXPOSE 8000
-
-# 使用 Gunicorn 启动
-CMD ["gunicorn", "app.main:app", \
-     "--workers", "4", \
-     "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--bind", "0.0.0.0:8000"]
-```
-
-**docker-compose.yml**:
-```yaml
-version: '3.8'
-
-services:
-  api:
-    build: .
-    ports:
-      - "8000:8000"
-    env_file:
-      - .env
-    restart: always
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./h5/dist:/usr/share/nginx/html
-      - ./nginx.conf:/etc/nginx/nginx.conf
-    depends_on:
-      - api
-    restart: always
-```
-
-#### 5. 部署前检查清单
-
-**后端检查**:
-- [ ] `.env` 中配置正确的生产环境API Key
-- [ ] `APP_ENV=production`
-- [ ] 数据库连接（如果已集成）
-- [ ] 日志目录权限 (`/var/log/zheilitrip/`)
-- [ ] 防火墙开放8000端口
-- [ ] HTTPS证书配置（推荐Let's Encrypt）
-
-**前端检查**:
-- [ ] `npm run build` 构建成功
-- [ ] `h5/dist/` 目录生成完整
-- [ ] 高德地图Key已配置在 `index.html`
-- [ ] API代理已移除（生产环境不需要）
-- [ ] 前端路由模式（建议使用Hash路由或Nginx配置SPA支持）
-
-**API Key清单**:
-- [ ] 智谱AI API Key (`BIGMODEL_API_KEY`)
-- [ ] DeepSeek API Key (`DEEPSEEK_API_KEY`)
-- [ ] 高德地图 JS SDK Key (`index.html` 中)
-- [x] 高德地图 Web服务 Key (`AMAP_API_KEY` 环境变量)
-
-**性能优化**:
-- [ ] 启用Gzip压缩
-- [ ] 静态资源CDN
-- [ ] LLM响应缓存（相同prompt不重复调用）
-- [ ] 图片资源优化（压缩、懒加载）
-- [ ] 数据库连接池（如果已集成）
-
-**监控与告警**:
-- [ ] 后端健康检查端点 (`/health`)
-- [ ] 错误日志收集（Sentry/LogRocket）
-- [ ] 性能监控（APM）
-- [ ] LLM API调用量监控
-- [ ] 高德地图API调用量监控
-
-#### 6. 上线后运维
-
-**日志查看**:
-```bash
-# 后端日志
-tail -f /var/log/zheilitrip/access.log
-tail -f /var/log/zheilitrip/error.log
-
-# Nginx日志
-tail -f /var/log/nginx/access.log
-tail -f /var/log/nginx/error.log
-```
-
-**服务管理**:
-```bash
-# 重启后端
-systemctl restart zheilitrip-api
-
-# 重启Nginx
-systemctl reload nginx
-
-# 查看服务状态
-systemctl status zheilitrip-api
-```
-
-**数据库备份**（如果已集成）:
-```bash
-# 定时备份脚本
-0 2 * * * pg_dump zheilitrip > /backup/db_$(date +\%Y\%m\%d).sql
-```
-
-### Docker部署 (可选)
-```dockerfile
-FROM python:3.10-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY app/ ./app/
-EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
----
-
-## 九、后续迭代
-
-### MVP已完成
-- [x] H5页面流程 (出发→三选→生成→邀请函→详情)
-- [x] LLM服务层 (支持多模型切换)
-- [x] 旅行攻略生成API
-- [x] 丰富内容生成API (rich-plan)
-- [x] 智能定位功能 (浏览器定位+高德逆地理编码)
-- [x] 八卦占卜互动 (撒叶动画+64卦映射)
-- [x] LLM风格化HTML邀请函生成
-- [x] 高德地图集成 (路线规划+距离计算)
-- [x] 高德后端服务 (地理编码/逆地理编码/驾车路线规划/距离查询)
-
-### 规划中
-- [ ] 用户系统 (登录/收藏/历史)
-- [ ] 数据库持久化
-- [ ] 真实地图集成
-- [ ] 旅行陪伴模式 (聊天/导览)
-- [ ] 小程序/App移植
-- [ ] 打卡核销系统
-- [ ] AI游记生成
-
----
-
-## 十、联系方式
-
-- 产品: 浙里Trip
-- 版本: 1.0.0 MVP
-- 状态: 开发中
-- kinzer 个人主页：备案审核中

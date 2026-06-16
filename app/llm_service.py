@@ -254,10 +254,10 @@ class BigModelService(BaseLLMService):
                     content = data[6:]
                     if content != "[DONE]":
                         try:
-                            chunk = eval(content)
+                            chunk = json.loads(content)
                             if chunk["choices"][0]["delta"].get("content"):
                                 yield chunk["choices"][0]["delta"]["content"]
-                        except:
+                        except (json.JSONDecodeError, KeyError, IndexError):
                             pass
     
     def image_generation(
@@ -297,47 +297,271 @@ class BigModelService(BaseLLMService):
         return result["data"][0]["url"]
     
     def search(
-        self, 
-        query: str, 
-        model: str = "search-std",
+        self,
+        query: str,
+        engine: str = "search_pro",
+        count: int = 5,
+        content_size: str = "high",
+        search_domain_filter: Optional[str] = None,
         **kwargs
     ) -> List[Dict[str, Any]]:
         """
-        搜索功能 (需要智谱搜索支持)
-        
+        智谱 Web Search API
+
         Args:
-            query: 搜索query
-            model: 搜索模型
+            query: 搜索查询（最长70字符）
+            engine: 搜索引擎 search_std(0.01元) | search_pro(0.03元) | search_pro_sogou(0.05元)
+            count: 返回结果数（最多50）
+            content_size: 内容大小 low | medium | high
+            search_domain_filter: 域名过滤（如 "gov.cn"）
         """
         if not self.api_key:
             raise RuntimeError("BigModel API key not configured")
-        
+
         payload = {
-            "model": model,
-            "query": query,
+            "search_query": query[:70],
+            "search_engine": engine,
+            "count": count,
+            "content_size": content_size,
         }
+        if search_domain_filter:
+            payload["search_domain_filter"] = search_domain_filter
         payload.update(kwargs)
-        
+
         response = requests.post(
-            f"{self.base_url}/search",
+            f"{self.base_url}/web_search",
             json=payload,
             headers=self._get_headers(),
-            timeout=60
+            timeout=30
         )
         response.raise_for_status()
-        
+
+        result = response.json()
+        return result.get("search_result", [])
+
+    def read_page(
+        self,
+        url: str,
+        retain_images: bool = True,
+        return_format: str = "markdown",
+    ) -> Dict[str, Any]:
+        """
+        智谱 Reader API — 读取网页内容并提取图片
+
+        Args:
+            url: 要读取的网页 URL
+            retain_images: 是否保留图片标签
+            return_format: 返回格式 markdown | text
+        """
+        if not self.api_key:
+            raise RuntimeError("BigModel API key not configured")
+
+        payload = {
+            "url": url,
+            "retain_images": retain_images,
+            "return_format": return_format,
+            "with_images_summary": True,
+        }
+
+        response = requests.post(
+            f"{self.base_url}/reader",
+            json=payload,
+            headers=self._get_headers(),
+            timeout=30
+        )
+        response.raise_for_status()
+
         return response.json()
-    
+
+    def extract_images_from_page(self, url: str, max_images: int = 5) -> List[Dict[str, str]]:
+        """
+        从网页中提取图片 URL
+
+        Args:
+            url: 网页地址
+            max_images: 最多返回图片数
+
+        Returns:
+            [{ "url": "...", "source": "...", "title": "..." }]
+        """
+        import re
+        try:
+            result = self.read_page(url, retain_images=True, return_format="markdown")
+            content = result.get("reader_result", {}).get("content", "")
+
+            # 从 markdown 中提取图片 URL: ![alt](url)
+            image_urls = re.findall(r'!\[.*?\]\((https?://[^\)]+)\)', content)
+
+            # 过滤掉非风景图片
+            skip_patterns = [
+                'favicon', 'logo', 'icon', 'avatar', 'thumb', '.svg', 'data:image',
+                'badge', 'award', 'certificate', 'sprite', 'loading', 'placeholder',
+                'pixel', 'track', 'analytics', 'ad.', 'ads.',
+                'footer', 'header', 'nav', 'menu', 'button', 'arrow',
+                'weather', 'police', 'record', 'baidu', 'sogou', 'qq.com',
+                'weibo.com', 'wechat', 'mini_program',
+            ]
+            # 跳过 CDN 缩略图 URL 模式
+            skip_url_patterns = [
+                r'_\d{2,3}_\d{2,3}_',  # 如 _200_200_ 格式的缩略图
+                r'/thumb/', r'/thumbnail/',
+                r'pic\d+\.',  # 图片 CDN 缩略图
+            ]
+            filtered = []
+            for img_url in image_urls:
+                url_lower = img_url.lower()
+                # 跳过包含过滤词的 URL
+                if any(p in url_lower for p in skip_patterns):
+                    continue
+                # 跳过缩略图 URL 模式
+                if any(re.search(p, url_lower) for p in skip_url_patterns):
+                    continue
+                # 跳过太短的 URL（可能是占位符）
+                if len(img_url) < 20:
+                    continue
+                # 跳过明显的图标/小图路径
+                if re.search(r'/(icon|logo|badge|avatar|thumb|sprite)/', url_lower):
+                    continue
+                # 跳过 .gif（通常是动画图标）
+                if url_lower.endswith('.gif'):
+                    continue
+                filtered.append(img_url)
+
+            return [
+                {"url": u, "source": url, "title": ""}
+                for u in filtered[:max_images]
+            ]
+        except Exception as e:
+            print(f"[read_page] 提取图片失败 {url}: {e}")
+            return []
+
+    def find_destination_images(
+        self,
+        destination: str,
+        count: int = 4,
+    ) -> List[Dict[str, str]]:
+        """
+        搜索目的地风景图片
+
+        优先使用 DuckDuckGo 图片搜索（免费、无需API key、直接返回图片URL）
+        回退到智谱 Web Search + Reader API
+
+        Args:
+            destination: 目的地名称（如"安吉"）
+            count: 最终返回的图片数量
+
+        Returns:
+            [{ "url": "...", "source": "...", "title": "..." }]
+        """
+        all_images: List[Dict[str, str]] = []
+
+        # 方式一：DuckDuckGo 图片搜索（优先）
+        try:
+            from ddgs import DDGS
+            queries = [
+                f"{destination} 风景 旅游 景点",
+                f"{destination} 自然风光 摄影",
+            ]
+            for query in queries:
+                if len(all_images) >= count * 2:
+                    break
+                try:
+                    with DDGS() as ddgs:
+                        results = list(ddgs.images(
+                            query,
+                            max_results=count + 2,  # 多取一些，后面会过滤
+                        ))
+                    for r in results:
+                        img_url = r.get('image', '')
+                        title = r.get('title', '')
+                        source = r.get('source', '')
+                        # 跳过明显非中文内容（英文标题占多数）
+                        if title and sum(1 for c in title if '\u4e00' <= c <= '\u9fff') < len(title) * 0.3:
+                            continue
+                        if img_url and len(img_url) > 20:
+                            all_images.append({
+                                "url": img_url,
+                                "source": source,
+                                "title": title,
+                                "is_official": ".gov.cn" in source or ".org.cn" in source,
+                            })
+                except Exception as e:
+                    print(f"[find_images] DuckDuckGo搜索失败: {e}")
+                    continue
+        except ImportError:
+            print("[find_images] ddgs 未安装，跳过DuckDuckGo搜索")
+
+        # 方式二：如果 DuckDuckGo 结果不足，用智谱搜索补充
+        if len(all_images) < count and self.api_key:
+            try:
+                queries = [
+                    f"{destination} 旅游 景点介绍 图片",
+                    f"{destination} 风景 摄影 高清",
+                ]
+                for query in queries:
+                    if len(all_images) >= count * 2:
+                        break
+                    try:
+                        results = self.search(
+                            query=query,
+                            engine="search_pro",
+                            count=3,
+                            content_size="high",
+                        )
+                    except Exception as e:
+                        print(f"[find_images] 智谱搜索失败: {e}")
+                        continue
+
+                    for item in results:
+                        if len(all_images) >= count * 2:
+                            break
+                        link = item.get("link", "")
+                        if not link:
+                            continue
+                        is_official = ".gov.cn" in link or ".org.cn" in link
+                        try:
+                            images = self.extract_images_from_page(link, max_images=3)
+                            for img in images:
+                                img["title"] = item.get("title", "")
+                                img["is_official"] = is_official
+                            all_images.extend(images)
+                        except Exception:
+                            continue
+            except Exception as e:
+                print(f"[find_images] 智谱搜索补充失败: {e}")
+
+        # 去重并按质量排序（官方源优先）
+        seen = set()
+        unique = []
+        for img in all_images:
+            if img["url"] not in seen:
+                seen.add(img["url"])
+                unique.append(img)
+
+        unique.sort(key=lambda x: (
+            not x.get("is_official", False),
+            -len(x["url"])
+        ))
+
+        return unique[:count]
+
     def get_provider_name(self) -> str:
         return "BigModel (智谱)"
 
 
 # ==================== LLM管理器 ====================
 
+# 模型降级链：glm-4.7 → glm-4.6v → glm-4.5-air
+FALLBACK_MODELS = [
+    BigModelModel.GLM_4_7,
+    BigModelModel.GLM_4_6,
+    BigModelModel.GLM_4_5_AIR,
+]
+
+
 class LLMManager:
     """
-    LLM管理器 - 支持多模型切换
-    优先使用glm-4.5-air进行旅程规划
+    LLM管理器 - 支持多模型切换和降级链
     """
     
     def __init__(self, provider: str = "auto"):
@@ -353,8 +577,8 @@ class LLMManager:
         self.deepseek_service = DeepSeekService()
         self.bigmodel_service = BigModelService()
         
-        # 旅程规划专用模型 (优先glm-4.5-air)
-        self.travel_model = BigModelModel.GLM_4_5_AIR
+        # 主模型（优先 glm-4.7）
+        self.travel_model = BigModelModel.GLM_4_7
     
     def _get_service(self, provider: Optional[str] = None) -> BaseLLMService:
         """获取指定提供商的服务"""
@@ -389,6 +613,37 @@ class LLMManager:
         """通用流式对话接口"""
         service = self._get_service(provider)
         return service.chat_stream(messages, model=model, **kwargs)
+
+    def chat_with_fallback(
+        self,
+        messages: List[Dict[str, str]],
+        models: Optional[List[BigModelModel]] = None,
+        **kwargs
+    ) -> str:
+        """
+        带降级链的对话接口
+
+        按顺序尝试多个模型，第一个成功即返回。
+        默认降级链: glm-4.7 → glm-4.6v → glm-4.5-air
+        """
+        fallback = models or FALLBACK_MODELS
+        last_error = None
+
+        for model in fallback:
+            try:
+                result = self.chat(
+                    messages,
+                    provider=LLMProvider.BIGMODEL.value,
+                    model=model.value,
+                    **kwargs
+                )
+                return result
+            except Exception as e:
+                last_error = e
+                print(f"[fallback] {model.value} failed: {e}")
+                continue
+
+        raise RuntimeError(f"所有模型均失败，最后错误: {last_error}")
     
     def generate_travel_plan(
         self,
@@ -453,7 +708,7 @@ class LLMManager:
                     result = result.split("```")[1].split("```")[0]
                 
                 return json.loads(result.strip())
-            except:
+            except json.JSONDecodeError:
                 return {"raw_content": result, "status": "success"}
                 
         except Exception as e:
@@ -616,7 +871,8 @@ class LLMManager:
         try:
             result = self.chat(
                 messages,
-                model=self.default_model.value,
+                model=self.travel_model.value,
+                provider=LLMProvider.BIGMODEL.value,
                 temperature=0.9,
                 max_tokens=4000
             )
@@ -656,6 +912,222 @@ class LLMManager:
                     "status": "partial_success"
                 }
 
+        except Exception as e:
+            return self._get_mock_plan(direction, style)
+
+    def agent_generate_plan(
+        self,
+        direction: str,
+        style: str,
+        departure_time: str,
+        user_location: str = "",
+        destination_name: str = "",
+        distance_info: str = "",
+        hexagram_name: str = "",
+        hexagram_meaning: str = "",
+        hexagram_travel_hint: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Agent 流水线：搜索 → 提取图片 → LLM 生成 → 模板渲染
+
+        完整的旅行攻略生成流程，包含真实的网络搜索和图片提取。
+        """
+        from .template_renderer import render_invitation
+
+        images: List[Dict[str, str]] = []
+        search_context = ""
+
+        # Step 1: 搜索目的地信息
+        if destination_name and self.bigmodel_service.api_key:
+            try:
+                search_results = self.bigmodel_service.search(
+                    query=f"{destination_name} 旅游景点 人文 特色",
+                    engine="search_pro",
+                    count=5,
+                    content_size="high",
+                )
+
+                snippets = []
+                for r in search_results[:5]:
+                    title = r.get("title", "")
+                    content = r.get("content", "")
+                    link = r.get("link", "")
+                    if content:
+                        snippets.append(f"- {title}: {content[:200]} (来源: {link})")
+
+                if snippets:
+                    search_context = "\n".join(snippets)
+
+            except Exception as e:
+                print(f"[agent] 搜索目的地信息失败: {e}")
+
+        # Step 2: 获取图片（优先缓存，不足再搜索）
+        if destination_name:
+            from .image_cache import get_image_cache
+            cache = get_image_cache()
+
+            cached_images = cache.get_cached_images(destination_name)
+            if len(cached_images) >= 3:
+                images = cached_images
+                print(f"[agent] 命中图片缓存: {destination_name} ({len(cached_images)} 张)")
+            elif self.bigmodel_service.api_key:
+                # 缓存不足，搜索补充
+                try:
+                    searched_images = self.bigmodel_service.find_destination_images(
+                        destination=destination_name,
+                        count=4,
+                    )
+                    # 下载并缓存
+                    images = cache.cache_images_batch(
+                        destination=destination_name,
+                        images=searched_images,
+                        min_count=3,
+                    )
+                except Exception as e:
+                    print(f"[agent] 搜索图片失败，使用已有缓存: {e}")
+                    images = cached_images
+
+        # Step 3: LLM 生成旅行攻略（不含 HTML，只生成结构化数据）
+        llm_result = self.generate_travel_plan_for_agent(
+            direction=direction,
+            style=style,
+            departure_time=departure_time,
+            user_location=user_location,
+            destination_name=destination_name,
+            distance_info=distance_info,
+            hexagram_name=hexagram_name,
+            hexagram_meaning=hexagram_meaning,
+            hexagram_travel_hint=hexagram_travel_hint,
+            search_context=search_context,
+        )
+
+        # Step 4: 模板渲染 HTML
+        invitation_html = render_invitation(
+            plan_data=llm_result,
+            images=images,
+            hexagram_name=hexagram_name,
+            hexagram_meaning=hexagram_meaning,
+            hexagram_travel_hint=hexagram_travel_hint,
+        )
+
+        llm_result["invitation_html"] = invitation_html
+        llm_result["images"] = images
+        return llm_result
+
+    def generate_travel_plan_for_agent(
+        self,
+        direction: str,
+        style: str,
+        departure_time: str,
+        user_location: str = "",
+        destination_name: str = "",
+        distance_info: str = "",
+        hexagram_name: str = "",
+        hexagram_meaning: str = "",
+        hexagram_travel_hint: str = "",
+        search_context: str = "",
+    ) -> Dict[str, Any]:
+        """
+        Agent 模式下的 LLM 生成（只输出结构化数据，不含 HTML）
+        """
+        style_labels = {
+            "relax": "放空指南 - 什么都不做，慢下来",
+            "explore": "山野探索 - 向山而行，寻找秘境",
+            "slow": "慢城漫游 - 走走停停，体验当地",
+            "nature": "听风看云 - 自然疗愈，回归本真",
+        }
+        direction_labels = {
+            "east": "东行（利在东行）",
+            "south": "南下（利向南下）",
+            "west": "西去（利往西去）",
+            "north": "北往（利往北走）",
+            "any": "四方皆宜",
+        }
+        time_labels = {
+            "now": "现在就走",
+            "afternoon": "午后出发（14:00左右）",
+            "tomorrow": "明天清晨（06:00左右）",
+        }
+
+        system_prompt = """你是一个小众自驾旅行规划师。根据用户的偏好和搜索到的真实信息，生成一份旅行攻略。
+
+要求：
+- 选择一个合适的小众目的地（或使用指定的目的地）
+- 生成 3-5 个独特的体验时刻
+- 包含当地文化核心解读
+- 文案风格：文艺、轻松、有画面感
+- 参考搜索到的真实景点信息，但用你的语言重新组织
+
+输出格式（严格遵守 JSON）：
+```json
+{
+  "destination": { "name": "", "subtitle": "", "description": "", "distance": "", "duration": "", "suggested_time": "", "image": "", "direction_label": "" },
+  "moments": [ { "time": "", "title": "", "description": "", "image": "" } ],
+  "bgm": { "title": "", "artist": "", "description": "" },
+  "atmosphere": "",
+  "culture_core": "",
+  "template": "gradient"
+}
+```
+
+template 可选值：gradient（渐变风格）| glow（暗夜风格）| ink（水墨风格）
+请根据目的地气质选择最合适的模板。"""
+
+        hexagram_section = ""
+        if hexagram_name:
+            hexagram_section = f"""
+卦象信息：
+- 卦名：{hexagram_name}卦
+- 卦辞：{hexagram_meaning}
+- 出行指引：{hexagram_travel_hint}"""
+
+        search_section = ""
+        if search_context:
+            search_section = f"""
+以下是关于该目的地的搜索结果，请参考这些真实信息来丰富你的攻略：
+{search_context}"""
+
+        user_prompt = f"""帮我规划一次放空之旅：
+- 方向偏好：{direction_labels.get(direction, '四方皆宜')}
+- 旅行风格：{style_labels.get(style, '放空指南')}
+- 出发时间：{time_labels.get(departure_time, '现在就走')}
+- 区域范围：浙江，300公里以内
+用户当前位置：{user_location}
+指定的目的地：{destination_name}
+距离信息：{distance_info}
+{hexagram_section}
+{search_section}
+
+请选择一个合适的小众目的地（或使用指定的目的地），生成完整的旅行攻略。注意：只输出 JSON，不要输出 HTML。"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+
+        try:
+            import json as _json
+            result = self.chat_with_fallback(
+                messages,
+                temperature=0.9,
+                max_tokens=2000
+            )
+
+            # 提取 JSON
+            if "```json" in result:
+                result = result.split("```json")[1].split("```")[0]
+            elif "```" in result:
+                result = result.split("```")[1].split("```")[0]
+
+            parsed = _json.loads(result.strip())
+
+            # 移除可能残留的 invitation_html（不应该有，但以防万一）
+            parsed.pop("invitation_html", "")
+
+            return parsed
+
+        except _json.JSONDecodeError:
+            return {"raw_content": result, "status": "parse_failed"}
         except Exception as e:
             return self._get_mock_plan(direction, style)
 

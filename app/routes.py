@@ -3,10 +3,9 @@
 浙里Trip - API路由
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from typing import Optional
-import json
 from pydantic import BaseModel, Field
 
 from .models import (
@@ -19,6 +18,7 @@ from .models import (
     HealthResponse,
     RichPlanRequest,
     RichPlanResponse,
+    ImageInfo,
     GeocodeRequest,
     GeocodeResponse,
     ReGeocodeRequest,
@@ -28,9 +28,10 @@ from .models import (
     DistanceRequest,
     DistanceResponse,
 )
-from .llm_service import get_llm_manager, generate_rich_plan
+from .llm_service import get_llm_manager
 from .amap_service import get_amap_service, AmapService, AmapError
 from .config import settings
+from .utils.hexagram import get_travel_hint
 
 
 router = APIRouter()
@@ -77,7 +78,7 @@ async def get_destinations():
 
 
 @router.post("/api/v1/travel/plan", response_model=TravelPlanResponse)
-async def generate_travel_plan(request: TravelPlanRequest):
+def generate_travel_plan(request: TravelPlanRequest):
     """
     生成旅行攻略
     
@@ -195,25 +196,25 @@ async def get_travel_plan(plan_id: str):
 
 
 @router.post("/api/v1/travel/reroll")
-async def reroll_travel_plan(request: TravelPlanRequest):
+def reroll_travel_plan(request: TravelPlanRequest):
     """
     重新生成旅行攻略（用户点击"换一个地方"）
     
     MVP阶段限制：每用户每天最多3次
     """
-    return await generate_travel_plan(request)
+    return generate_travel_plan(request)
 
 
-# ==================== 丰富内容生成 ====================
+# ==================== 丰富内容生成（Agent 流水线） ====================
 
 @router.post("/api/v1/travel/rich-plan", response_model=RichPlanResponse)
-async def generate_rich_travel_plan(request: RichPlanRequest):
+def generate_rich_travel_plan(request: RichPlanRequest):
     """
-    生成丰富的旅行攻略（含风格化HTML邀请函）
-    
-    接收用户位置、卦象等信息，通过LLM生成完整的旅行攻略和HTML邀请函。
+    Agent 流水线：搜索目的地信息 → 提取官方图片 → LLM 生成攻略 → 模板渲染邀请函
     """
     try:
+        llm = get_llm_manager()
+
         # 构建距离信息字符串
         distance_str = ""
         if request.distance_info:
@@ -229,12 +230,10 @@ async def generate_rich_travel_plan(request: RichPlanRequest):
         hexagram_meaning = request.hexagram.meaning if request.hexagram else ""
         hexagram_travel_hint = ""
         if request.hexagram and request.hexagram.lines:
-            # 根据卦象给出旅行提示
-            from .utils.hexagram import get_travel_hint
             hexagram_travel_hint = get_travel_hint(request.hexagram.name)
 
-        # 调用LLM生成丰富内容
-        result = generate_rich_plan(
+        # 调用 Agent 流水线
+        result = llm.agent_generate_plan(
             direction=request.direction,
             style=request.style,
             departure_time=request.departure_time,
@@ -248,39 +247,15 @@ async def generate_rich_travel_plan(request: RichPlanRequest):
 
         # 处理降级模式
         if "raw_content" in result:
-            # 降级到Mock数据
-            return RichPlanResponse(
-                plan=TravelPlan(
-                    destination=Destination(
-                        name="安吉",
-                        subtitle="一个适合慢下来的地方",
-                        description="你会在三小时后抵达。那里没有人等你，也没有人催你。只有风，和刚刚好的时间。",
-                        distance="287km",
-                        duration="3小时12分钟",
-                        suggested_time="周六 06:30",
-                        image="https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80",
-                        direction_label="四方皆宜"
-                    ),
-                    moments=[
-                        Moment(time="清晨 6:40", title="在空无一人的竹林里散步", description="呼吸着带着露水的空气", image="https://images.unsplash.com/photo-1513836279014-a89f7a76ae86?w=400&q=80"),
-                        Moment(time="午后", title="一家没有菜单的咖啡店", description="老板只做他想做的那一杯", image="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=400&q=80"),
-                        Moment(time="傍晚 18:30", title="在湖边看日落发呆", description="太阳落得很慢，像你此刻的心情", image="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&q=80"),
-                    ],
-                    bgm=BgmRecommendation(title="Mystery of Love", artist="Sufjan Stevens", description="像夏日午后的一场白日梦"),
-                    atmosphere="竹林清风，慢下来的勇气"
-                ),
-                invitation_html=result.get("invitation_html", ""),
-                hexagram_name=hexagram_name,
-                hexagram_interpretation=hexagram_meaning,
-                message="生成成功（降级模式）"
-            )
+            return _build_fallback_response(hexagram_name, hexagram_meaning)
 
         # 正常构建响应
         dest_data = result.get("destination", {})
         moments_data = result.get("moments", [])
         bgm_data = result.get("bgm", {})
+        images_data = result.get("images", [])
 
-        # 距离/时间：优先使用高德API真实数据，LLM返回值仅作兜底
+        # 距离/时间：优先使用高德API真实数据
         final_distance = dest_data.get("distance", "280km")
         final_duration = dest_data.get("duration", "3小时")
         if request.distance_info and request.distance_info.distance:
@@ -290,13 +265,13 @@ async def generate_rich_travel_plan(request: RichPlanRequest):
 
         plan = TravelPlan(
             destination=Destination(
-                name=dest_data.get("name", "安吉"),
-                subtitle=dest_data.get("subtitle", "一个适合慢下来的地方"),
+                name=dest_data.get("name", request.destination_name or "未知"),
+                subtitle=dest_data.get("subtitle", ""),
                 description=dest_data.get("description", ""),
                 distance=final_distance,
                 duration=final_duration,
-                suggested_time=dest_data.get("suggested_time", "周六 06:30"),
-                image=dest_data.get("image", "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80"),
+                suggested_time=dest_data.get("suggested_time", ""),
+                image=dest_data.get("image", ""),
                 direction_label=dest_data.get("direction_label", "四方皆宜")
             ),
             moments=[
@@ -309,11 +284,11 @@ async def generate_rich_travel_plan(request: RichPlanRequest):
                 for m in moments_data
             ],
             bgm=BgmRecommendation(
-                title=bgm_data.get("title", "平凡之路"),
-                artist=bgm_data.get("artist", "朴树"),
-                description=bgm_data.get("description", "适合放空的公路音乐")
+                title=bgm_data.get("title", ""),
+                artist=bgm_data.get("artist", ""),
+                description=bgm_data.get("description", "")
             ) if bgm_data else None,
-            atmosphere=result.get("atmosphere", "★★★★☆")
+            atmosphere=result.get("atmosphere", "")
         )
 
         return RichPlanResponse(
@@ -322,6 +297,8 @@ async def generate_rich_travel_plan(request: RichPlanRequest):
             invitation_html=result.get("invitation_html", ""),
             hexagram_name=hexagram_name,
             hexagram_interpretation=hexagram_meaning,
+            images=[ImageInfo(url=img["url"], source=img.get("source", ""), title=img.get("title", "")) for img in images_data],
+            template_used=result.get("template", "gradient"),
             message="生成成功"
         )
 
@@ -329,10 +306,56 @@ async def generate_rich_travel_plan(request: RichPlanRequest):
         raise HTTPException(status_code=500, detail=f"生成丰富旅行攻略失败: {str(e)}")
 
 
+def _build_fallback_response(hexagram_name: str, hexagram_meaning: str) -> RichPlanResponse:
+    """降级响应"""
+    from .template_renderer import render_invitation
+
+    fallback_plan_data = {
+        "destination": {
+            "name": "安吉",
+            "subtitle": "一个适合慢下来的地方",
+            "description": "你会在三小时后抵达。那里没有人等你，也没有人催你。只有风，和刚刚好的时间。",
+            "distance": "287km",
+            "duration": "3小时12分钟",
+            "suggested_time": "周六 06:30",
+            "direction_label": "四方皆宜",
+        },
+        "moments": [
+            {"time": "清晨 6:40", "title": "在空无一人的竹林里散步", "description": "呼吸着带着露水的空气", "image": ""},
+            {"time": "午后", "title": "一家没有菜单的咖啡店", "description": "老板只做他想做的那一杯", "image": ""},
+            {"time": "傍晚 18:30", "title": "在湖边看日落发呆", "description": "太阳落得很慢，像你此刻的心情", "image": ""},
+        ],
+        "bgm": {"title": "Mystery of Love", "artist": "Sufjan Stevens", "description": "像夏日午后的一场白日梦"},
+        "atmosphere": "竹林清风，慢下来的勇气",
+        "culture_core": "安吉是竹文化的故乡，这里有中国大竹海的美誉。",
+        "template": "gradient",
+    }
+
+    invitation_html = render_invitation(
+        plan_data=fallback_plan_data,
+        images=[],
+        hexagram_name=hexagram_name,
+        hexagram_meaning=hexagram_meaning,
+    )
+
+    return RichPlanResponse(
+        plan=TravelPlan(
+            destination=Destination(**fallback_plan_data["destination"]),
+            moments=[Moment(**m) for m in fallback_plan_data["moments"]],
+            bgm=BgmRecommendation(**fallback_plan_data["bgm"]),
+            atmosphere=fallback_plan_data["atmosphere"],
+        ),
+        invitation_html=invitation_html,
+        hexagram_name=hexagram_name,
+        hexagram_interpretation=hexagram_meaning,
+        message="生成成功（降级模式）"
+    )
+
+
 # ==================== 高德地图服务 ====================
 
 @router.post("/api/v1/amap/geocode", response_model=GeocodeResponse)
-async def amap_geocode(request: GeocodeRequest):
+def amap_geocode(request: GeocodeRequest):
     """
     地理编码：将地址转换为经纬度坐标
     
@@ -366,7 +389,7 @@ async def amap_geocode(request: GeocodeRequest):
 
 
 @router.post("/api/v1/amap/regeocode", response_model=ReGeocodeResponse)
-async def amap_regeocode(request: ReGeocodeRequest):
+def amap_regeocode(request: ReGeocodeRequest):
     """
     逆地理编码：将经纬度坐标转换为地址
     
@@ -396,7 +419,7 @@ async def amap_regeocode(request: ReGeocodeRequest):
 
 
 @router.post("/api/v1/amap/driving", response_model=DrivingRouteResponse)
-async def amap_driving(request: DrivingRouteRequest):
+def amap_driving(request: DrivingRouteRequest):
     """
     驾车路线规划
     
@@ -457,7 +480,7 @@ async def amap_driving(request: DrivingRouteRequest):
 
 
 @router.post("/api/v1/amap/distance", response_model=DistanceResponse)
-async def amap_distance(request: DistanceRequest):
+def amap_distance(request: DistanceRequest):
     """
     一站式两地距离查询
     
@@ -507,7 +530,7 @@ async def get_available_models():
 
 
 @router.post("/api/v1/llm/chat")
-async def llm_chat(request: LLMChatRequest):
+def llm_chat(request: LLMChatRequest):
     """
     LLM对话测试接口
     
@@ -523,3 +546,38 @@ async def llm_chat(request: LLMChatRequest):
         return {"success": True, "response": response}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+# ==================== 图片服务 ====================
+
+@router.get("/api/v1/images/{destination}/{filename}")
+def serve_image(destination: str, filename: str):
+    """提供缓存图片的静态文件服务"""
+    import os
+    from fastapi.responses import FileResponse
+
+    from .image_cache import get_image_cache
+    cache = get_image_cache()
+
+    filepath = os.path.join(cache.cache_dir, destination, filename)
+
+    # 安全检查：防止路径穿越
+    real_path = os.path.realpath(filepath)
+    real_cache = os.path.realpath(cache.cache_dir)
+    if not real_path.startswith(real_cache):
+        raise HTTPException(status_code=403, detail="禁止访问")
+
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="图片不存在")
+
+    # 根据扩展名设置 content-type
+    ext = os.path.splitext(filename)[1].lower()
+    media_types = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }
+    media_type = media_types.get(ext, "image/jpeg")
+
+    return FileResponse(filepath, media_type=media_type)

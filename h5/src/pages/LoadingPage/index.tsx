@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
 import { useTravelStore } from '@/stores/travelStore';
 import FateGenerator from '@/components/FateGenerator';
-import { selectDestination } from '@/utils/hexagram';
+import { selectDestination, ZHEJIANG_DESTINATIONS } from '@/utils/hexagram';
 import { getDrivingRoute } from '@/services/amap';
 import type { DistanceInfo } from '@/types';
 
@@ -43,7 +44,19 @@ async function getDistanceFromBackend(
 
 export default function LoadingPage() {
   const navigate = useNavigate();
-  const { isLoading, currentPlan, loadingIndex, loadingTexts, generateRichPlan, preferences, userLocation } = useTravelStore();
+  const { isLoading, currentPlan, loadingIndex, loadingTexts, generateRichPlan, preferences, userLocation, previewDestination, setPreviewDestination } = useTravelStore(
+    useShallow((s) => ({
+      isLoading: s.isLoading,
+      currentPlan: s.currentPlan,
+      loadingIndex: s.loadingIndex,
+      loadingTexts: s.loadingTexts,
+      generateRichPlan: s.generateRichPlan,
+      preferences: s.preferences,
+      userLocation: s.userLocation,
+      previewDestination: s.previewDestination,
+      setPreviewDestination: s.setPreviewDestination,
+    }))
+  );
   const [planStarted, setPlanStarted] = useState(false);
 
   useEffect(() => {
@@ -61,8 +74,16 @@ export default function LoadingPage() {
     let distanceInfo: DistanceInfo | undefined;
 
     try {
-      // 1. 随机选择目的地
-      const dest = selectDestination(preferences.direction);
+      // 1. 选择目的地：优先使用预选目的地，否则随机选择
+      let dest: { name: string; lngLat: [number, number] };
+
+      if (previewDestination) {
+        dest = previewDestination;
+        setPreviewDestination(null); // 清除预选，下次恢复随机
+      } else {
+        dest = selectDestination(preferences.direction);
+      }
+
       useTravelStore.setState({ destinationName: dest.name });
 
       // 2. 计算距离：优先前端AMap SDK，失败则用后端API兜底

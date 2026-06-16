@@ -62,7 +62,7 @@ const DESTINATIONS: DestinationData[] = [
     moments: [
       { time: '清晨', title: '梯田上的云海', description: '站在高处，看云从脚下流过', image: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=400&q=80' },
       { time: '下午', title: '画乡的老樟树下', description: '当地的老人说，这棵树有三百年了', image: 'https://images.unsplash.com/photo-1502082553048-f009c37129b9?w=400&q=80' },
-      { time: '黄昏', title: '溪边的石板路', description: ' barefoot，感受来自山里的凉意', image: 'https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?w=400&q=80' },
+      { time: '黄昏', title: '溪边的石板路', description: '赤脚行走，感受来自山里的凉意', image: 'https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?w=400&q=80' },
     ],
     atmosphere: '云海仙境，遗世独立的宁静',
     bgm: { title: 'Nuvole Bianche', artist: 'Ludovico Einaudi', description: '像云一样自由的旋律' },
@@ -104,7 +104,7 @@ const DESTINATIONS: DestinationData[] = [
     moments: [
       { time: '上午', title: '乘缆车穿越云海', description: '山在脚下，云在腰间', image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&q=80' },
       { time: '中午', title: '杨梅树下野餐', description: '如果是六月，杨梅刚好熟透', image: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400&q=80' },
-      { time: '傍晚', title: '淡竹原始森林', description: '溪水很浅，可以 barefoot 走完全程', image: 'https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?w=400&q=80' },
+      { time: '傍晚', title: '淡竹原始森林', description: '溪水很浅，可以赤脚走完全程', image: 'https://images.unsplash.com/photo-1432405972618-c60b0225b8f9?w=400&q=80' },
     ],
     atmosphere: '云中漫步，与山对话',
     bgm: { title: 'Experience', artist: 'Ludovico Einaudi', description: '宏大而宁静，适合面对大山时听' },
@@ -149,7 +149,7 @@ const DESTINATIONS: DestinationData[] = [
       { time: '下午', title: '丽水街的老茶馆', description: '一壶茶，一下午，一条老街', image: 'https://images.unsplash.com/photo-1559305616-3f99cd43e353?w=400&q=80' },
     ],
     atmosphere: '古村悠悠，时光倒流',
-    bgm: { title: 'Canon in D', artist: 'Pachelbel', description: ' timeless 的旋律， timeless 的村落' },
+    bgm: { title: 'Canon in D', artist: 'Pachelbel', description: '经典的旋律，永恒的村落' },
   },
   {
     name: '缙云',
@@ -158,7 +158,7 @@ const DESTINATIONS: DestinationData[] = [
     image: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=800&q=80',
     direction: 'south',
     moments: [
-      { time: '清晨', title: '鼎湖峰的晨雾', description: ' photographer 称之为"天然的山水大片"', image: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=400&q=80' },
+      { time: '清晨', title: '鼎湖峰的晨雾', description: '摄影师称之为"天然的山水大片"', image: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?w=400&q=80' },
       { time: '中午', title: '缙云烧饼', description: '梅干菜肉的香气，能飘三条街', image: 'https://images.unsplash.com/photo-1555126634-323283e090fa?w=400&q=80' },
       { time: '傍晚', title: '朱潭山的晚霞', description: '夕阳把水面染成金色', image: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&q=80' },
     ],

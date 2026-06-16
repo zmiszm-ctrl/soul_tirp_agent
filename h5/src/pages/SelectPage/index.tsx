@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Navigation, Sun, Moon, Sunrise, Cloud, TreePine, Coffee, Mountain, Waves } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { useTravelStore } from '@/stores/travelStore';
 import { useUserStore } from '@/stores/userStore';
 import BaguaDivination from '@/components/BaguaDivination';
@@ -30,8 +31,10 @@ const times: { value: DepartureTime; label: string; sublabel: string }[] = [
 
 export default function SelectPage() {
   const navigate = useNavigate();
-  const { setPreferences } = useTravelStore();
-  const { user, preferences } = useUserStore();
+  const setPreferences = useTravelStore((s) => s.setPreferences);
+  const { user, preferences } = useUserStore(
+    useShallow((s) => ({ user: s.user, preferences: s.preferences }))
+  );
 
   const [selectedDirection, setSelectedDirection] = useState<TravelDirection>(
     preferences?.default_direction || 'any'

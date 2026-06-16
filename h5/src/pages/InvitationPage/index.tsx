@@ -2,13 +2,23 @@ import { useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Share2, RefreshCw } from 'lucide-react';
+import DOMPurify from 'dompurify';
+import { useShallow } from 'zustand/react/shallow';
 import { useTravelStore } from '@/stores/travelStore';
 import InvitationCard from '@/components/InvitationCard';
 import MomentsCard from '@/components/MomentsCard';
 
 export default function InvitationPage() {
   const navigate = useNavigate();
-  const { currentPlan, hasRerolled, reroll, invitationHTML, hexagramResult } = useTravelStore();
+  const { currentPlan, hasRerolled, reroll, invitationHTML, hexagramResult } = useTravelStore(
+    useShallow((s) => ({
+      currentPlan: s.currentPlan,
+      hasRerolled: s.hasRerolled,
+      reroll: s.reroll,
+      invitationHTML: s.invitationHTML,
+      hexagramResult: s.hexagramResult,
+    }))
+  );
 
   useEffect(() => {
     if (!currentPlan) {
@@ -23,12 +33,14 @@ export default function InvitationPage() {
     await reroll();
   };
 
-  // HTML安全过滤：移除script标签
   const safeHTML = useMemo(() => {
     if (!invitationHTML) return '';
-    return invitationHTML
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/on\w+\s*=/gi, 'data-blocked=');
+    return DOMPurify.sanitize(invitationHTML, {
+      ALLOWED_TAGS: ['div', 'p', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'br', 'hr', 'strong', 'em', 'b', 'i', 'u', 'img', 'svg', 'path', 'circle', 'rect', 'line'],
+      ALLOWED_ATTR: ['class', 'style', 'src', 'alt', 'width', 'height', 'viewBox', 'fill', 'stroke', 'stroke-width', 'd', 'cx', 'cy', 'r', 'x', 'y', 'x1', 'y1', 'x2', 'y2'],
+      FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'textarea', 'select', 'button', 'style'],
+      FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
+    });
   }, [invitationHTML]);
 
   const hasHTMLInvitation = safeHTML.length > 50;

@@ -44,10 +44,11 @@ export const useUserStore = create<UserState>()(
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password }),
           });
+          if (!response.ok) return { success: false, message: `服务器错误 (${response.status})` };
           const data = await response.json();
           if (data.success && data.user) {
             set({ user: data.user });
-            get().fetchPreferences();
+            await get().fetchPreferences();
             return { success: true, message: data.message };
           }
           return { success: false, message: data.message || '登录失败' };
@@ -63,6 +64,7 @@ export const useUserStore = create<UserState>()(
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password }),
           });
+          if (!response.ok) return { success: false, message: `服务器错误 (${response.status})` };
           const data = await response.json();
           if (data.success && data.user) {
             set({ user: data.user, preferences: DEFAULT_PREFERENCES });
@@ -85,6 +87,7 @@ export const useUserStore = create<UserState>()(
         set({ isLoading: true });
         try {
           const response = await fetch(`${API_BASE}/api/v1/user/preferences/${user.id}`);
+          if (!response.ok) return;
           const data = await response.json();
           if (data.success && data.preferences) {
             set({ preferences: data.preferences });
@@ -107,6 +110,7 @@ export const useUserStore = create<UserState>()(
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(prefs),
           });
+          if (!response.ok) return { success: false, message: `服务器错误 (${response.status})` };
           const data = await response.json();
           if (data.success) {
             set({ preferences: prefs });

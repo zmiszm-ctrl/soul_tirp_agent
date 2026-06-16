@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from typing import Optional
 import json
 import hashlib
+import hmac
 import os
 
 from .models import (
@@ -37,7 +38,7 @@ def verify_password(password: str, stored_hash: str) -> bool:
         salt = bytes.fromhex(salt_hex)
         key = bytes.fromhex(key_hex)
         new_key = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
-        return new_key == key
+        return hmac.compare_digest(new_key, key)
     except Exception:
         return False
 
@@ -45,7 +46,7 @@ def verify_password(password: str, stored_hash: str) -> bool:
 # ==================== 注册 ====================
 
 @router.post("/register", response_model=UserResponse)
-async def register(request: UserRegisterRequest):
+def register(request: UserRegisterRequest):
     """用户注册"""
     try:
         with get_db() as conn:
@@ -90,7 +91,7 @@ async def register(request: UserRegisterRequest):
 # ==================== 登录 ====================
 
 @router.post("/login", response_model=UserResponse)
-async def login(request: UserLoginRequest):
+def login(request: UserLoginRequest):
     """用户登录"""
     try:
         with get_db() as conn:
@@ -126,7 +127,7 @@ async def login(request: UserLoginRequest):
 # ==================== 获取偏好 ====================
 
 @router.get("/preferences/{user_id}", response_model=UserPreferencesResponse)
-async def get_preferences(user_id: int):
+def get_preferences(user_id: int):
     """获取用户偏好"""
     try:
         with get_db() as conn:
@@ -167,7 +168,7 @@ async def get_preferences(user_id: int):
 # ==================== 更新偏好 ====================
 
 @router.put("/preferences/{user_id}", response_model=UserPreferencesResponse)
-async def update_preferences(user_id: int, preferences: UserPreferences):
+def update_preferences(user_id: int, preferences: UserPreferences):
     """更新用户偏好"""
     try:
         with get_db() as conn:

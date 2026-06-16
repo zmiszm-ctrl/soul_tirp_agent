@@ -9,7 +9,7 @@ import ShareCard from '@/components/ShareCard';
 
 export default function DetailPage() {
   const navigate = useNavigate();
-  const { currentPlan } = useTravelStore();
+  const currentPlan = useTravelStore((s) => s.currentPlan);
   const [isLiked, setIsLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [showShare, setShowShare] = useState(false);
@@ -114,25 +114,27 @@ export default function DetailPage() {
       </motion.div>
 
       {/* BGM Recommendation */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.7, duration: 0.6 }}
-        className="mx-4 mt-6 p-5 rounded-card bg-white shadow-card"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-card bg-accent-blue/10 flex items-center justify-center">
-            <Music className="w-6 h-6 text-accent-blue" />
+      {currentPlan.bgm && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7, duration: 0.6 }}
+          className="mx-4 mt-6 p-5 rounded-card bg-white shadow-card"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-card bg-accent-blue/10 flex items-center justify-center">
+              <Music className="w-6 h-6 text-accent-blue" />
+            </div>
+            <div className="flex-1">
+              <p className="text-caption text-text-secondary">旅程BGM推荐</p>
+              <p className="text-body font-sans-zh text-text-primary mt-0.5">
+                {currentPlan.bgm.title} - {currentPlan.bgm.artist}
+              </p>
+              <p className="text-caption text-text-secondary mt-1">{currentPlan.bgm.description}</p>
+            </div>
           </div>
-          <div className="flex-1">
-            <p className="text-caption text-text-secondary">旅程BGM推荐</p>
-            <p className="text-body font-sans-zh text-text-primary mt-0.5">
-              {currentPlan.bgm.title} - {currentPlan.bgm.artist}
-            </p>
-            <p className="text-caption text-text-secondary mt-1">{currentPlan.bgm.description}</p>
-          </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      )}
 
       {/* Share Card Modal */}
       {showShare && (

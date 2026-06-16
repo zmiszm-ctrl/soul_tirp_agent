@@ -34,6 +34,10 @@ app.add_middleware(
 app.include_router(router)
 app.include_router(user_router)
 
+# 确保图片缓存目录存在
+from .image_cache import get_image_cache
+get_image_cache()
+
 
 # 首页
 @app.get("/")

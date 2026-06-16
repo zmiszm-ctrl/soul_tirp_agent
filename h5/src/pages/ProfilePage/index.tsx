@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, LogOut, Check } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { useUserStore } from '@/stores/userStore';
 import type { UserPreferences, TravelDirection, TravelStyle, DepartureTime } from '@/types';
 
@@ -75,7 +76,16 @@ const MUSIC_OPTIONS = [
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { user, preferences, logout, fetchPreferences, savePreferences, isLoading } = useUserStore();
+  const { user, preferences, logout, fetchPreferences, savePreferences, isLoading } = useUserStore(
+    useShallow((s) => ({
+      user: s.user,
+      preferences: s.preferences,
+      logout: s.logout,
+      fetchPreferences: s.fetchPreferences,
+      savePreferences: s.savePreferences,
+      isLoading: s.isLoading,
+    }))
+  );
   const [formData, setFormData] = useState<UserPreferences>({
     default_direction: null,
     default_style: null,

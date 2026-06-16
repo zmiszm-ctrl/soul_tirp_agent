@@ -22,24 +22,14 @@
 
 @layer base {
   :root {
-    /* Color Tokens */
-    --color-bg-primary: #F4F1EC;
-    --color-bg-secondary: #E9E5DF;
-    --color-text-primary: #2F2F2F;
-    --color-text-secondary: #6B6B6B;
-    --color-accent-blue: #7FA7B5;
-    --color-accent-green: #6B7D6D;
-    --color-accent-orange: #D9A066;
-    --color-line-soft: rgba(0,0,0,0.08);
-
     /* Gradient */
     --gradient-hero: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%);
 
     /* Typography Tokens */
-    --font-size-hero: 32px;
-    --font-size-title: 24px;
-    --font-size-body: 16px;
-    --font-size-caption: 13px;
+    --font-size-hero: 2rem;
+    --font-size-title: 1.5rem;
+    --font-size-body: 1rem;
+    --font-size-caption: 0.8125rem;
 
     --line-height-loose: 1.8;
     --line-height-normal: 1.5;
@@ -48,18 +38,15 @@
     --font-sans: 'Noto Sans SC', 'PingFang SC', 'Helvetica Neue', sans-serif;
 
     /* Spacing Tokens */
-    --space-xs: 4px;
-    --space-sm: 8px;
-    --space-md: 16px;
-    --space-lg: 24px;
-    --space-xl: 40px;
-    --space-xxl: 64px;
+    --space-xs: 0.25rem;
+    --space-sm: 0.5rem;
+    --space-md: 1rem;
+    --space-lg: 1.5rem;
+    --space-xl: 2.5rem;
+    --space-xxl: 4rem;
 
-    /* Radius & Shadow */
-    --radius-card: 16px;
+    /* Radius & Shadow (aliases for @theme) */
     --radius-button: 999px;
-    --shadow-soft: 0 10px 30px rgba(0,0,0,0.08);
-    --shadow-card: 0 4px 20px rgba(0,0,0,0.06);
 
     /* Motion Tokens */
     --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
@@ -97,5 +84,19 @@
     margin: 0 auto;
     position: relative;
     overflow-x: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-normal: 0ms;
+    --duration-slow: 0ms;
+  }
+
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

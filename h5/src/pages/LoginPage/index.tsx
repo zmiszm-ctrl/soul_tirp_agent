@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { useUserStore } from '@/stores/userStore';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { user, login, register, logout } = useUserStore();
+  const { user, login, register, logout } = useUserStore(
+    useShallow((s) => ({ user: s.user, login: s.login, register: s.register, logout: s.logout }))
+  );
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');

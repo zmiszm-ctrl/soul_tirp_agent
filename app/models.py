@@ -111,6 +111,13 @@ class HexagramInfo(BaseModel):
     lines: list[int] = Field(default=[1,1,1,1,1,1], description="六爻，1=阳 0=阴")
 
 
+class ImageInfo(BaseModel):
+    """图片信息"""
+    url: str = Field(description="图片URL")
+    source: str = Field(default="", description="来源页面URL")
+    title: str = Field(default="", description="图片标题")
+
+
 class RichPlanRequest(BaseModel):
     """丰富内容生成请求"""
     direction: Literal["east", "south", "west", "north", "any"] = Field(
@@ -132,9 +139,11 @@ class RichPlanResponse(BaseModel):
     """丰富内容生成响应"""
     success: bool = Field(default=True)
     plan: TravelPlan
-    invitation_html: str = Field(default="", description="LLM生成的风格化HTML邀请函")
+    invitation_html: str = Field(default="", description="渲染后的风格化HTML邀请函")
     hexagram_name: str = Field(default="", description="卦名")
     hexagram_interpretation: str = Field(default="", description="卦象解读")
+    images: List[ImageInfo] = Field(default=[], description="搜索到的目的地图片")
+    template_used: str = Field(default="gradient", description="使用的模板")
     message: Optional[str] = None
 
 

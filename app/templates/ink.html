@@ -1,0 +1,70 @@
+<!-- 山水画卷 — 东方美学水墨风格 -->
+<div style="max-width:375px;margin:0 auto;background:linear-gradient(to bottom,#f5f0e8,#e8e0d4,#d4c8b8);border-radius:16px;overflow:hidden;font-family:'Noto Serif SC','Source Han Serif SC','Georgia',serif;">
+
+  <!-- 水墨 hero -->
+  <div style="position:relative;padding:40px 24px 32px;text-align:center;background:linear-gradient(to bottom,#2c2c2c,#4a4a4a);">
+    <div style="position:absolute;top:12px;right:16px;font-size:10px;color:rgba(255,255,255,0.3);letter-spacing:1px;">{direction_label}</div>
+    <p style="margin:0 0 12px;font-size:12px;letter-spacing:4px;color:rgba(255,255,255,0.5);">邀 约</p>
+    <h1 style="margin:0 0 8px;font-size:40px;font-weight:600;color:#f5f0e8;line-height:1.2;letter-spacing:2px;">{destination_name}</h1>
+    <p style="margin:0 0 20px;font-size:13px;color:rgba(245,240,232,0.7);font-family:'Noto Sans SC',sans-serif;">{destination_subtitle}</p>
+    <div style="width:60px;height:1px;background:rgba(245,240,232,0.3);margin:0 auto;"></div>
+  </div>
+
+  <!-- 内容区 -->
+  <div style="padding:24px;">
+
+    <!-- 距离信息 -->
+    <div style="text-align:center;margin:0 0 24px;">
+      <p style="margin:0;font-size:12px;color:#8b7355;font-family:'Noto Sans SC',sans-serif;">{distance} · {duration} · {suggested_time}</p>
+    </div>
+
+    <!-- 邀请函正文 -->
+    <div style="padding:20px;background:rgba(255,255,255,0.6);border-radius:12px;margin:0 0 24px;border:1px solid rgba(139,115,85,0.15);">
+      <p style="margin:0;font-size:15px;line-height:2;color:#3d3d3d;font-family:'Noto Serif SC',serif;letter-spacing:0.5px;">{description}</p>
+    </div>
+
+    <!-- 图片画廊 -->
+    <div style="margin:0 0 24px;display:flex;gap:8px;overflow-x:auto;">
+      {images_html}
+    </div>
+
+    <!-- 体验时刻 -->
+    <div style="margin:0 0 24px;">
+      <p style="margin:0 0 16px;text-align:center;">
+        <span style="display:inline-block;padding:0 16px;font-size:12px;letter-spacing:3px;color:#8b7355;background:#f5f0e8;position:relative;">行程</span>
+      </p>
+      {moments_html}
+    </div>
+
+    <!-- 文化核心 -->
+    <div style="margin:0 0 24px;padding:20px;background:rgba(255,255,255,0.5);border-radius:12px;border-left:3px solid #8b7355;">
+      <p style="margin:0 0 8px;font-size:11px;letter-spacing:2px;color:#8b7355;">在地文化</p>
+      <p style="margin:0;font-size:14px;line-height:1.8;color:#4a4a4a;font-family:'Noto Serif SC',serif;">{culture_core}</p>
+    </div>
+
+    <!-- 卦象 -->
+    {hexagram_html}
+
+    <!-- BGM -->
+    <div style="margin:0 0 24px;padding:16px;background:rgba(255,255,255,0.4);border-radius:12px;text-align:center;">
+      <p style="margin:0 0 4px;font-size:11px;letter-spacing:2px;color:#8b7355;">旅途之音</p>
+      <p style="margin:0;font-size:15px;color:#3d3d3d;font-family:'Noto Serif SC',serif;">{bgm_title}</p>
+      <p style="margin:4px 0 0;font-size:12px;color:#8b7355;font-family:'Noto Sans SC',sans-serif;">{bgm_artist} · {bgm_description}</p>
+    </div>
+
+    <!-- 来源标注 -->
+    <div style="margin:0 0 16px;padding-top:16px;border-top:1px solid rgba(139,115,85,0.15);">
+      <p style="margin:0;font-size:10px;color:#a09080;font-family:'Noto Sans SC',sans-serif;">图片来源：{image_sources}</p>
+    </div>
+
+    <!-- CTA -->
+    <div style="text-align:center;">
+      <a href="#" style="display:inline-block;padding:12px 32px;background:#3d3d3d;color:#f5f0e8;border-radius:4px;font-size:14px;font-family:'Noto Serif SC',serif;text-decoration:none;letter-spacing:2px;">前往{destination_name}</a>
+    </div>
+  </div>
+
+  <!-- 底部 -->
+  <div style="padding:16px 24px;text-align:center;background:rgba(255,255,255,0.3);">
+    <p style="margin:0;font-size:10px;color:#a09080;letter-spacing:1px;">浙里Trip · 不赶路，不打卡，只出发</p>
+  </div>
+</div>
